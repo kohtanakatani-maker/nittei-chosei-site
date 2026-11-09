@@ -2,26 +2,583 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>日程調整ページについて</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>日程調整</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  body{font-family:-apple-system,"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;max-width:720px;margin:40px auto;padding:0 20px;line-height:1.8;color:#222}
-  h1{font-size:1.5rem} h2{font-size:1.15rem;margin-top:2em}
-  a{color:#2b5797}
+:root{
+  color-scheme: light;
+  --bg:#EEF2F4; --surface:#FFFFFF; --ink:#1E2B35; --muted:#5D6B76; --line:#D3DBE0;
+  --yes:#1F8A68; --yes-bg:#D5EFE4; --maybe:#B7801B; --maybe-bg:#F7E6C2; --no:#7A8590; --no-bg:#E2E6EA;
+  --empty:#F6F8F9; --accent:#2457A6; --weekend:#B4473C; --sat:#2457A6; --busy:#B4473C;
+  box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+header h1{font-size:1.4rem;font-weight:700;margin:0;letter-spacing:.02em}
+header p{margin:.35rem 0 0;color:var(--muted);white-space:pre-wrap}
+.meta{color:var(--muted);font-size:.86rem;margin-top:.3rem}
+.layout{display:grid;grid-template-columns:300px 1fr;gap:18px;margin-top:18px;align-items:start}
+@media (max-width:880px){.layout{grid-template-columns:1fr}}
+.side{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.panel h2{font-size:1rem;margin:0 0 .6rem;font-weight:700}
+.panel p{margin:.3rem 0;color:var(--muted);font-size:.87rem}
+.brushes{display:flex;gap:8px}
+.brush{flex:1;font:inherit;font-size:1.35rem;font-weight:700;padding:6px 0;border-radius:8px;border:2px solid transparent;cursor:pointer;line-height:1.2}
+.brush small{display:block;font-size:.7rem;font-weight:500}
+.brush[data-v="1"]{background:var(--yes-bg);color:var(--yes)}
+.brush[data-v="2"]{background:var(--maybe-bg);color:var(--maybe)}
+.brush[data-v="3"]{background:var(--no-bg);color:var(--no)}
+.brush[aria-pressed="true"]{border-color:var(--ink)}
+.counts{display:flex;gap:12px;margin-top:10px;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.counts b{color:var(--ink)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:.45rem 0}
+.days{display:flex;gap:4px;flex-wrap:wrap}
+.days label{cursor:pointer;position:relative}
+.days input{position:absolute;opacity:0;pointer-events:none}
+.days span{display:inline-block;min-width:30px;text-align:center;padding:3px 0;border:1px solid var(--line);border-radius:6px;font-size:.85rem;background:var(--empty)}
+.days input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+select,button,textarea,input[type=text]{font:inherit;color:inherit}
+select{background:var(--empty);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+input[type=text],textarea{width:100%;background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:1rem}
+textarea{min-height:60px;font-size:.95rem}
+.btn{background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:.88rem}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn.big{font-size:1.05rem;padding:12px 20px;width:100%}
+.btn:disabled{opacity:.5;cursor:default}
+.check{display:flex;gap:6px;align-items:flex-start;font-size:.85rem;color:var(--muted);margin-top:.5rem}
+.status{font-size:.85rem;margin-top:.5rem;min-height:1.3em}
+.status.err{color:var(--weekend)}
+.status.ok{color:var(--yes)}
+.main{min-width:0}
+.gridbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:70vh}
+table.grid{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;user-select:none;-webkit-user-select:none}
+.grid th,.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+.grid thead th{position:sticky;top:0;background:var(--surface);z-index:2;font-size:.78rem;font-weight:500;color:var(--muted);padding:6px 4px;min-width:52px;cursor:pointer;white-space:nowrap}
+.grid thead th:first-child{left:0;z-index:3;cursor:default}
+.grid tbody th{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;font-weight:500;padding:0 10px;white-space:nowrap;cursor:pointer;font-size:.88rem;min-width:110px}
+.grid tbody th .dow{display:inline-block;width:1.2em;text-align:center;margin-left:.15em}
+.grid tbody th.sat .dow{color:var(--sat)} .grid tbody th.sun .dow,.grid tbody th.hol .dow{color:var(--weekend)}
+.grid tbody th .note{display:block;font-size:.68rem;color:var(--weekend);line-height:1.2;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.grid tbody tr.wk-sep th,.grid tbody tr.wk-sep td{border-top:2px solid var(--muted)}
+.grid thead th:hover,.grid tbody th:hover{color:var(--accent)}
+.grid td{height:36px;text-align:center;font-weight:700;font-size:1.05rem;cursor:crosshair;position:relative;background:var(--empty);color:var(--muted)}
+.grid td.na{background:repeating-linear-gradient(45deg,transparent 0 4px,var(--line) 4px 5px);cursor:default}
+.grid td.v0{color:var(--yes);opacity:.45;font-weight:500}
+.grid td.v1{background:var(--yes-bg);color:var(--yes)}
+.grid td.v2{background:var(--maybe-bg);color:var(--maybe)}
+.grid td.v3{background:var(--no-bg);color:var(--no)}
+.grid td.busy::after{content:"";position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--busy)}
+.legend{display:flex;gap:16px;font-size:.8rem;color:var(--muted);margin:8px 2px 0;flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--busy);margin-right:4px;vertical-align:middle}
+details summary{cursor:pointer;font-weight:500;font-size:.85rem;color:var(--muted)}
+.tip{font-size:.8rem;color:var(--muted)}
+kbd{font:inherit;font-size:.78em;border:1px solid var(--line);border-radius:4px;padding:0 4px;background:var(--empty)}
+label.lab{display:block;font-size:.85rem;color:var(--muted);margin:.5rem 0 .2rem}
+table.res{border-collapse:collapse;width:100%;font-size:.86rem}
+.res th,.res td{border:1px solid var(--line);padding:5px 8px;text-align:center;white-space:nowrap}
+.res th:first-child,.res td:first-child{text-align:left;white-space:normal;min-width:150px}
+.res tr.all-ok td:first-child{font-weight:700;color:var(--yes)} .res tr.all-ok{background:var(--yes-bg)}
+.reswrap{overflow-x:auto}
+.loading{color:var(--muted)}
 </style>
 </head>
 <body>
-<h1>日程調整ページについて</h1>
-<p>このサイトは、新潟大学 中谷航太（研究推進センター）が研究打ち合わせ等の日程調整に用いている「日程調整ページ」の案内ページです。日程調整ページは、依頼者から送られる個別のURLからアクセスし、候補日時に対して ○／△／× で回答するものです。</p>
+<div class="wrap" id="app"><p class="loading">読み込み中です…</p></div>
 
-<h2>Googleカレンダーとの連携について</h2>
-<p>回答者は、任意で自分のGoogleカレンダーの「空き情報」を読み込み、予定が重なる候補を自動で × にすることができます。この機能は回答者本人がGoogleアカウントで許可した場合のみ動作し、取得するのは「予定が入っている時間帯」のみです。予定のタイトルや内容、参加者などは一切取得しません。</p>
-<p>詳しくは <a href="privacy.html">プライバシーポリシー</a> をご覧ください。</p>
+<template id="about">
+<header><h1>日程調整ページについて</h1></header>
+<section class="panel" style="margin-top:18px;max-width:720px">
+<p style="color:var(--ink)">このサイトは、新潟大学 中谷航太（医学部医学科研究推進センター）が研究打ち合わせ等の日程調整に用いている「日程調整ページ」です。依頼者から送られる個別のURL（<code>?e=…</code> 付き）からアクセスし、候補日時に対して ○／△／× で回答します。</p>
+<p style="color:var(--ink)">回答者は、任意で自分のGoogleカレンダーの「空き情報」を読み込み、予定が重なる候補を自動で × にすることができます。この機能は回答者本人がGoogleアカウントで許可した場合のみ、ブラウザの中だけで動作します。取得するのは「予定が入っている時間帯」のみで、予定のタイトルや内容は一切取得せず、サーバーにも送信しません。</p>
+<p style="color:var(--ink)">連絡先: kohta.nakatani.1019@niigata-u.ac.jp</p>
+<p><a href="privacy.html">プライバシーポリシー</a> ／ <a href="terms.html">利用規約</a></p>
+</section>
+</template>
 
-<h2>連絡先</h2>
-<p>新潟大学 医学部医学科研究推進センター 中谷航太<br>
-メール: kohta.nakatani.1019@niigata-u.ac.jp</p>
+<template id="tpl">
+<header>
+  <h1 id="evTitle"></h1>
+  <p id="evDesc"></p>
+  <div class="meta" id="evMeta"></div>
+</header>
 
-<p style="margin-top:3em;font-size:.9rem;color:#666"><a href="privacy.html">プライバシーポリシー</a> ／ <a href="terms.html">利用規約</a></p>
+<div class="layout">
+<aside class="side">
+  <section class="panel">
+    <h2>お名前</h2>
+    <input type="text" id="name" placeholder="例：新潟 太郎" autocomplete="name">
+    <p class="tip">同じお名前で再送信すると上書きされます。</p>
+  </section>
+
+  <section class="panel">
+    <h2>塗る記号</h2>
+    <div class="brushes" role="group" aria-label="塗る記号">
+      <button class="brush" data-v="1" aria-pressed="false">○<small>キー 1</small></button>
+      <button class="brush" data-v="2" aria-pressed="false">△<small>キー 2</small></button>
+      <button class="brush" data-v="3" aria-pressed="true">×<small>キー 3</small></button>
+    </div>
+    <p>塗っていない枠は○扱いです。都合の悪い枠だけ×や△で塗ってください。ドラッグで連続して塗れ、日付や時刻の見出しをクリックすると行・列ごと塗れます。</p>
+    <div class="row"><button class="btn" id="undo" disabled>元に戻す</button><span class="tip"><kbd>Ctrl</kbd>+<kbd>Z</kbd></span></div>
+    <div class="counts" id="counts"></div>
+  </section>
+
+  <section class="panel">
+    <h2>条件でまとめて塗る</h2>
+    <div class="days" id="days"></div>
+    <div class="row">
+      <select id="hFrom" aria-label="開始時刻"></select><span>時から</span>
+      <select id="hTo" aria-label="終了時刻"></select><span>時まで</span>
+    </div>
+    <div class="row"><button class="btn primary" id="applyRule">選んだ記号で塗る</button></div>
+    <div class="row">
+      <button class="btn" id="presetWork">平日9–18時を○、残りを×</button>
+      <button class="btn" id="fillEmpty">すべて○に戻す</button>
+    </div>
+    <label class="check"><input type="checkbox" id="lockBusy" checked> 予定のある枠はまとめ塗りで上書きしない</label>
+  </section>
+
+  <section class="panel">
+    <h2>カレンダーの予定を反映</h2>
+    <p>予定と重なる枠を×にします。</p>
+    <div id="gcalBox">
+      <div class="row"><button class="btn primary" id="loadCal">Googleカレンダーで自動判定</button></div>
+      <p class="tip">Googleのログイン画面が開きます。読み取るのは「空いているか」だけで、予定の内容は取得しません。判定はこのブラウザの中だけで行い、終わると接続は解除されます。</p>
+    </div>
+    <div class="row">
+      <label class="btn" for="icsIn" style="display:inline-block">予定ファイル（.ics / .zip）を選ぶ</label>
+      <input type="file" id="icsIn" accept=".ics,.zip,text/calendar,application/zip" hidden>
+    </div>
+    <details class="tip"><summary>予定ファイルの取り出し方</summary>
+      <p class="tip">Googleカレンダー：設定 → インポート／エクスポート → エクスポート（zipのまま選べます）。</p>
+      <p class="tip">Outlook（Windows版）：カレンダーを開き ファイル → 名前を付けて保存 → 期間を指定して .ics で保存。</p>
+      <p class="tip">Macのカレンダー：ファイル → 書き出す → 書き出す。</p>
+      <p class="tip">ファイルはこのブラウザの中だけで読み、どこにも送信しません。</p>
+    </details>
+    <div class="status" id="calStatus" role="status"></div>
+  </section>
+</aside>
+
+<div class="main">
+  <div class="gridbox" id="gridbox"><table class="grid" id="grid"></table></div>
+  <div class="legend"><span><i></i>カレンダーに予定あり（マスにカーソルで内容表示）</span><span>斜線：候補にない枠</span></div>
+
+  <section class="panel" style="margin-top:14px">
+    <label class="lab" for="comment">コメント（任意）</label>
+    <textarea id="comment" placeholder="例：11/20は16時までなら可能です"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn primary big" id="submit">この内容で回答を送信する</button></div>
+    <div class="status" id="msg" role="status"></div>
+  </section>
+
+  <section class="panel" style="margin-top:14px">
+    <h2>回答状況 <span class="tip" id="resCount"></span></h2>
+    <div id="results"></div>
+  </section>
+</div>
+</div>
+</template>
+
+<script>
+(()=>{
+const API_URL = "https://script.google.com/macros/s/AKfycbyQmdp2E3C5JieViyiFHlVVWEfprXMIbtopA07MYv5KvjcNJ1pcNpE23LpfZMGIzuxEOw/exec";
+const GOOGLE_CLIENT_ID = "336203229850-kcbi74i0ut3d2vqi64gsoj964d81p2t6.apps.googleusercontent.com";
+const EVENT_ID = (new URLSearchParams(location.search).get("e") || "").trim();
+async function apiGet(id){ const r = await fetch(API_URL+"?api=event&e="+encodeURIComponent(id), {redirect:"follow"}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+async function apiPost(obj){ const r = await fetch(API_URL, {method:"POST", redirect:"follow", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(obj)}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+const DOW = ["日","月","火","水","木","金","土"];
+const MARK = ["○","○","△","×"], MARKV = {"○":1,"△":2,"×":3};
+let DATA = null; // {event, slots, respondents}
+let S = { dates:[], times:[], cell:{}, vals:{}, busy:{}, notes:{}, holidays:{} };
+let brush = 3, hist = [];
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function load(k){ try{ const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
+const LS = "sched:"+EVENT_ID;
+
+/* ---------- load ---------- */
+function fail(msg){ $("app").innerHTML = '<div class="panel status err">'+esc(msg)+'</div>'; }
+async function init(){
+  if(!EVENT_ID){ $("app").innerHTML=""; $("app").appendChild($("about").content.cloneNode(true)); return; }
+  try{
+    const d = await apiGet(EVENT_ID);
+    if(d.error){ fail(d.error); return; }
+    DATA = d;
+    $("app").innerHTML = ""; $("app").appendChild($("tpl").content.cloneNode(true));
+    buildFromSlots(d.slots); wire(); renderAll();
+    document.title = d.event.title + " - 日程調整";
+  }catch(e){ fail("読み込みに失敗しました: "+e.message); }
+}
+
+/* ---------- grid model ---------- */
+function parseLocal(iso){ // "2026-11-18T10:00:00+09:00" -> parts (trust the written wall-clock time)
+  const m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if(!m) return null; return { y:+m[1], mo:+m[2], da:+m[3], h:m[4]!=null?+m[4]:null, mi:m[5]!=null?+m[5]:null };
+}
+function buildFromSlots(slots){
+  const dates=[], dIdx={}, times=[], tIdx={}, cell={};
+  for(const s of slots){
+    const st = parseLocal(s.start), en = parseLocal(s.end);
+    if(!st) continue;
+    const dk = st.y+"-"+st.mo+"-"+st.da;
+    if(!(dk in dIdx)){ dIdx[dk]=dates.length; dates.push({ key:dk, y:st.y, mo:st.mo, da:st.da, dow:new Date(st.y,st.mo-1,st.da).getDay() }); }
+    const allDay = /終日/.test(s.label) || st.h==null || (st.h===0 && st.mi===0 && en && en.h===23);
+    let sMin=null, eMin=null, tk="終日";
+    if(!allDay){ sMin=st.h*60+st.mi; eMin = en && en.h!=null ? en.h*60+en.mi : sMin+60; tk = String(sMin)+"-"+String(eMin); }
+    if(!(tk in tIdx)){ tIdx[tk]=times.length; times.push({ key:tk, sMin, eMin }); }
+    cell[dk+"|"+tk] = s;
+  }
+  dates.sort((a,b)=> new Date(a.y,a.mo-1,a.da) - new Date(b.y,b.mo-1,b.da));
+  times.sort((a,b)=> (a.sMin??-1) - (b.sMin??-1));
+  S = { dates, times, cell, vals:{}, busy:{}, notes:{}, holidays:{} };
+  const yrs = new Set(dates.map(d=>d.y)); yrs.forEach(y=> Object.assign(S.holidays, jpHolidays(y)));
+  const saved = load(LS);
+  if(saved){ S.vals=saved.vals||{}; S.busy=saved.busy||{}; S.notes=saved.notes||{}; if(saved.name) $("name").value=saved.name; if(saved.comment) $("comment").value=saved.comment; }
+  hist=[];
+}
+function persist(){ store(LS, { vals:S.vals, busy:S.busy, notes:S.notes, name:$("name").value, comment:$("comment").value }); }
+function tLabel(t){
+  if(t.sMin==null) return "終日";
+  const f=m=>Math.floor(m/60)+":"+String(m%60).padStart(2,"0");
+  return f(t.sMin)+"〜"+f(t.eMin);
+}
+
+/* ---------- render ---------- */
+function renderAll(){ renderHeader(); renderGrid(); renderResults(); }
+function renderHeader(){
+  const ev=DATA.event;
+  $("evTitle").textContent = ev.title;
+  $("evDesc").textContent = ev.description||"";
+  const closed = ev.status && ev.status!=="open";
+  $("evMeta").innerHTML = (ev.deadline?"回答期限: "+esc(ev.deadline)+"　":"") + "候補 "+Object.keys(S.cell).length+" 枠（"+S.dates.length+"日）　回答者 "+DATA.respondents.length+" 名" + (closed?"　<b>（締め切り済み）</b>":"");
+  if(closed){ $("submit").disabled=true; $("submit").textContent="この調整は締め切られています"; }
+}
+function renderGrid(){
+  let h = "<thead><tr><th scope=\"col\">日付</th>";
+  S.times.forEach((t,i)=>{ h += `<th scope="col" data-col="${i}" title="この時間帯を列ごと塗る">${esc(tLabel(t))}</th>`; });
+  h += "</tr></thead><tbody>";
+  S.dates.forEach((d,ri)=>{
+    const hol = S.holidays[d.key];
+    const cls = [d.dow===6?"sat":"", d.dow===0?"sun":"", hol?"hol":""].join(" ");
+    const sep = (ri>0 && d.dow===1) ? " class=\"wk-sep\"" : "";
+    const note = [hol, ...(S.notes[d.key]||[])].filter(Boolean);
+    h += `<tr${sep}><th scope="row" class="${cls}" data-row="${ri}" title="この日を行ごと塗る">${d.mo}/${d.da}<span class="dow">${DOW[d.dow]}</span>${note.length?`<span class="note">${esc(note.join("・"))}</span>`:""}</th>`;
+    S.times.forEach(t=>{
+      const k = d.key+"|"+t.key;
+      if(!S.cell[k]){ h += `<td class="na"></td>`; return; }
+      const v = S.vals[k]||0, bz = S.busy[k];
+      h += `<td data-k="${esc(k)}" class="v${v}${bz?" busy":""}"${bz?` title="${esc(bz)}"`:""}>${MARK[v]}</td>`;
+    });
+    h += "</tr>";
+  });
+  $("grid").innerHTML = h + "</tbody>";
+  counts();
+}
+function setCell(td, v){ td.className = "v"+v+(S.busy[td.dataset.k]?" busy":""); td.textContent = MARK[v]; }
+function snapshot(){ hist.push(JSON.stringify(S.vals)); if(hist.length>60) hist.shift(); $("undo").disabled=false; }
+function commit(){ persist(); counts(); }
+function counts(){
+  let c=[0,0,0,0]; for(const k in S.cell){ c[S.vals[k]||0]++; }
+  $("counts").innerHTML = `<span>○ <b>${c[0]+c[1]}</b></span><span>△ <b>${c[2]}</b></span><span>× <b>${c[3]}</b></span>`;
+}
+function renderResults(){
+  const people = DATA.respondents, slots = DATA.slots;
+  $("resCount").textContent = people.length ? "" : "";
+  if(!people.length){ $("results").innerHTML = '<p class="tip">まだ回答はありません。</p>'; return; }
+  const tally={}; slots.forEach(s=>tally[s.slot_id]={o:0,m:0});
+  people.forEach(p=>slots.forEach(s=>{ const a=p.answers[s.slot_id]; if(a==="○") tally[s.slot_id].o++; else if(a==="△") tally[s.slot_id].m++; }));
+  let h='<div class="reswrap"><table class="res"><tr><th>候補</th>';
+  people.forEach(p=> h+='<th>'+esc(p.name)+'</th>'); h+='<th>○</th></tr>';
+  slots.forEach(s=>{ const t=tally[s.slot_id], all = t.o===people.length;
+    h+='<tr class="'+(all?"all-ok":"")+'"><td>'+esc(s.label)+'</td>';
+    people.forEach(p=> h+='<td>'+esc(p.answers[s.slot_id]||"－")+'</td>');
+    h+='<td>'+t.o+(t.m?' <span class="tip">(△'+t.m+')</span>':'')+'</td></tr>'; });
+  h+='</table></div>';
+  const cm=people.filter(p=>p.comment); if(cm.length) h+='<p class="tip">'+cm.map(p=>esc(p.name)+'：'+esc(p.comment)).join('<br>')+'</p>';
+  $("results").innerHTML=h;
+}
+
+/* ---------- interaction ---------- */
+function wire(){
+  const grid=$("grid"); let painting=false;
+  grid.addEventListener("pointerdown", e=>{
+    const td=e.target.closest("td[data-k]"), th=e.target.closest("th[data-row], th[data-col]");
+    if(td){ e.preventDefault(); snapshot(); painting = e.pointerType!=="touch"; S.vals[td.dataset.k]=brush; setCell(td,brush); if(!painting) commit(); }
+    else if(th){ snapshot(); fillHeader(th); commit(); }
+  });
+  grid.addEventListener("pointerover", e=>{ if(!painting) return; const td=e.target.closest("td[data-k]"); if(!td) return; if(S.vals[td.dataset.k]!==brush){ S.vals[td.dataset.k]=brush; setCell(td,brush); } });
+  window.addEventListener("pointerup", ()=>{ if(painting){ painting=false; commit(); } });
+  document.querySelectorAll(".brush").forEach(b=> b.addEventListener("click", ()=> setBrush(+b.dataset.v)));
+  document.addEventListener("keydown", e=>{
+    if(e.target.matches("input,textarea,select")) return;
+    if(e.key==="1"||e.key==="2"||e.key==="3") setBrush(+e.key);
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); undo(); }
+  });
+  $("undo").addEventListener("click", undo);
+  const DAYS=[["月",1],["火",2],["水",3],["木",4],["金",5],["土",6],["日",0],["祝","h"]];
+  $("days").innerHTML = DAYS.map(([l,v])=>`<label><input type="checkbox" value="${v}" ${(typeof v==="number"&&v>=1&&v<=5)?"checked":""}><span>${l}</span></label>`).join("");
+  const hf=$("hFrom"), ht=$("hTo"); for(let i=0;i<=24;i++){ hf.add(new Option(i,i)); ht.add(new Option(i,i)); } hf.value=9; ht.value=18;
+  $("applyRule").addEventListener("click", ()=>{ const set=new Set([...document.querySelectorAll("#days input:checked")].map(i=> i.value==="h"?"h":+i.value)); snapshot(); applyRule(brush,set,+hf.value,+ht.value); renderGrid(); persist(); });
+  $("presetWork").addEventListener("click", ()=>{ snapshot(); applyRule(1,new Set([1,2,3,4,5]),9,18,{elseV:3}); renderGrid(); persist(); });
+  $("fillEmpty").addEventListener("click", ()=>{ snapshot(); const lock=$("lockBusy").checked; for(const k in S.cell){ S.vals[k]=(lock&&S.busy[k])?3:0; } renderGrid(); persist(); });
+  $("name").addEventListener("change", ()=>{ prefillFromExisting(); persist(); });
+  $("comment").addEventListener("input", persist);
+  $("submit").addEventListener("click", submit);
+  $("icsIn").addEventListener("change", onIcs);
+  $("loadCal").addEventListener("click", onGcal);
+}
+function setBrush(v){ brush=v; document.querySelectorAll(".brush").forEach(b=> b.setAttribute("aria-pressed", String(+b.dataset.v===v))); }
+function undo(){ if(!hist.length) return; S.vals=JSON.parse(hist.pop()); $("undo").disabled=!hist.length; renderGrid(); persist(); }
+function fillHeader(th){
+  if(th.dataset.row!=null){ const d=S.dates[+th.dataset.row]; S.times.forEach(t=>{ const k=d.key+"|"+t.key; if(S.cell[k]) S.vals[k]=brush; }); }
+  else { const t=S.times[+th.dataset.col]; S.dates.forEach(d=>{ const k=d.key+"|"+t.key; if(S.cell[k]) S.vals[k]=brush; }); }
+  renderGrid();
+}
+function applyRule(v, dayset, from, to, opts={}){
+  const lock=$("lockBusy").checked;
+  for(const d of S.dates){
+    const isHol=!!S.holidays[d.key]; const dayOk = isHol ? dayset.has("h") : dayset.has(d.dow);
+    for(const t of S.times){ const k=d.key+"|"+t.key; if(!S.cell[k]) continue;
+      if(lock && S.busy[k]){ S.vals[k]=3; continue; }
+      const inHours = t.sMin==null ? true : (t.sMin>=from*60 && (t.eMin??t.sMin+60)<=to*60);
+      if(dayOk && inHours) S.vals[k]=v; else if(opts.elseV) S.vals[k]=opts.elseV; }
+  }
+}
+function prefillFromExisting(){
+  const nm=$("name").value.trim(); if(!nm) return;
+  const p = DATA.respondents.find(r=>r.name===nm); if(!p) return;
+  if(Object.keys(S.vals).length && !confirm("「"+nm+"」さんの前回の回答を読み込みますか？（今の塗りは置き換わります）")) return;
+  snapshot(); S.vals={};
+  for(const k in S.cell){ const a=p.answers[S.cell[k].slot_id]; if(a && MARKV[a]) S.vals[k]=MARKV[a]; }
+  if(p.comment && !$("comment").value) $("comment").value=p.comment;
+  renderGrid(); persist();
+  $("msg").className="status"; $("msg").textContent="前回の回答を読み込みました。修正して送信すると上書きされます。";
+}
+
+/* ---------- submit ---------- */
+function submit(){
+  const msg=$("msg"), name=$("name").value.trim();
+  if(!name){ msg.className="status err"; msg.textContent="お名前を入力してください。"; $("name").focus(); return; }
+  const answers={}; for(const k in S.cell){ answers[S.cell[k].slot_id] = MARK[S.vals[k]||0]; }
+  const btn=$("submit"); btn.disabled=true; msg.className="status"; msg.textContent="送信中…";
+  apiPost({ action:"submit", eventId:EVENT_ID, name, answers, comment:$("comment").value }).then(async r=>{
+    btn.disabled=false;
+    if(r && r.error){ msg.className="status err"; msg.textContent=r.error; return; }
+    msg.className="status ok"; msg.textContent="送信しました。ありがとうございます。";
+    try{ const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; renderHeader(); renderResults(); } }catch(e){}
+  }).catch(e=>{ btn.disabled=false; msg.className="status err"; msg.textContent="送信に失敗しました: "+e.message; });
+}
+
+/* ---------- calendar: apply busy intervals ---------- */
+const calSt = ()=>$("calStatus");
+function applyEvents(evs, source){
+  snapshot(); S.busy={}; S.notes={};
+  const f=S.dates[0], l=S.dates[S.dates.length-1];
+  const winS=new Date(f.y,f.mo-1,f.da), winE=new Date(l.y,l.mo-1,l.da+1);
+  let used=0;
+  for(const ev of evs){
+    if(!(ev.e>winS && ev.s<winE)) continue; used++;
+    if(ev.allDay){
+      for(let x=new Date(ev.s); x<ev.e; x.setDate(x.getDate()+1)){
+        const dk=x.getFullYear()+"-"+(x.getMonth()+1)+"-"+x.getDate(); (S.notes[dk]=S.notes[dk]||[]).push(ev.title);
+        for(const t of S.times){ const k=dk+"|"+t.key; if(!S.cell[k]) continue; S.busy[k]=S.busy[k]?S.busy[k]+" / "+ev.title:ev.title+"（終日）"; S.vals[k]=3; }
+      } continue;
+    }
+    for(const d of S.dates) for(const t of S.times){
+      const k=d.key+"|"+t.key; if(!S.cell[k]||t.sMin==null) continue;
+      const ss=new Date(d.y,d.mo-1,d.da,0,t.sMin), se=new Date(d.y,d.mo-1,d.da,0,t.eMin??t.sMin+60);
+      if(ev.s<se && ev.e>ss){ S.busy[k]=S.busy[k]?S.busy[k]+" / "+ev.title:ev.title; S.vals[k]=3; }
+    }
+  }
+  const nb=Object.keys(S.busy).length, nd=Object.keys(S.notes).length;
+  calSt().className="status ok";
+  calSt().textContent = `${source}：期間内の予定${used}件を確認し、重なる${nb}枠を×にしました。`+(nd?`うち終日の予定がある${nd}日は終日×にしています。`:"")+" 必要なら塗り直してください。";
+  renderGrid(); persist();
+}
+
+/* ---------- Google Calendar (browser-only, free/busy only) ---------- */
+let tokenClient=null;
+function onGcal(){
+  const btn=$("loadCal"), st=calSt();
+  if(!(window.google && google.accounts && google.accounts.oauth2)){ st.className="status err"; st.textContent="Googleのログイン部品を読み込めませんでした。ページを再読み込みするか、予定ファイルから読み込んでください。"; return; }
+  if(!S.dates.length) return;
+  btn.disabled=true; st.className="status"; st.textContent="Googleのログイン画面を開いています…";
+  const f=S.dates[0], l=S.dates[S.dates.length-1];
+  const tMin=new Date(f.y,f.mo-1,f.da).toISOString(), tMax=new Date(l.y,l.mo-1,l.da+1).toISOString();
+  if(!tokenClient){
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: "https://www.googleapis.com/auth/calendar.freebusy",
+      prompt: "select_account",
+      callback: ()=>{},
+      error_callback: (err)=>{ btn.disabled=false; st.className="status err"; st.textContent = (err && err.type==="popup_closed") ? "ログイン画面が閉じられました。" : "Googleにログインできませんでした。予定ファイルから読み込むこともできます。"; }
+    });
+  }
+  tokenClient.callback = async (resp)=>{
+    if(!resp || resp.error){ btn.disabled=false; st.className="status err"; st.textContent="許可が得られませんでした。"; return; }
+    const token=resp.access_token;
+    try{
+      st.textContent="空き情報を取得しています…";
+      const r = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", { method:"POST", headers:{ "Authorization":"Bearer "+token, "Content-Type":"application/json" },
+        body: JSON.stringify({ timeMin:tMin, timeMax:tMax, timeZone:"Asia/Tokyo", items:[{id:"primary"}] }) });
+      const j = await r.json();
+      if(!r.ok) throw new Error((j.error && j.error.message) || ("HTTP "+r.status));
+      const busy = (j.calendars && j.calendars.primary && j.calendars.primary.busy) || [];
+      const evs = busy.map(b=>({ title:"予定あり", allDay:false, s:new Date(b.start), e:new Date(b.end) }));
+      applyEvents(evs, "Googleカレンダー");
+    }catch(e){ st.className="status err"; st.textContent="判定に失敗しました: "+e.message; }
+    finally{ btn.disabled=false; try{ google.accounts.oauth2.revoke(token, ()=>{}); }catch(e){} }
+  };
+  tokenClient.requestAccessToken();
+}
+
+/* ---------- .ics / .zip import ---------- */
+async function onIcs(e){
+  const files=[...e.target.files]; e.target.value=""; if(!files.length||!S.dates.length) return;
+  const st=calSt(); st.className="status"; st.textContent="読み込み中…";
+  const f=S.dates[0], l=S.dates[S.dates.length-1];
+  const winS=new Date(f.y,f.mo-1,f.da), winE=new Date(l.y,l.mo-1,l.da+1);
+  try{
+    let texts=[];
+    for(const file of files){
+      const buf=await file.arrayBuffer(); const head=new Uint8Array(buf,0,2);
+      if(head[0]===0x50 && head[1]===0x4b) texts=texts.concat(await unzipIcs(buf));
+      else texts.push(new TextDecoder().decode(buf));
+    }
+    if(!texts.some(t=>/BEGIN:VCALENDAR/.test(t))){ st.className="status err"; st.textContent="カレンダーの形式（.ics）として読めませんでした。エクスポートしたファイルを選んでください。"; return; }
+    const evs=[]; texts.forEach(t=> evs.push(...parseIcs(t,winS,winE)));
+    applyEvents(evs, "予定ファイル");
+  }catch(err){
+    st.className="status err";
+    st.textContent = (err && err.message==="nodecomp") ? "このブラウザでは zip を開けません。zip を展開して中の .ics を選んでください。" : "ファイルを読み込めませんでした。zip の場合は展開して中の .ics を選んでください。";
+  }
+}
+
+function jpHolidays(y){
+  const H = {}; const put=(m,d,n)=>{ H[y+"-"+m+"-"+d]=n; };
+  const nthMon=(m,n)=>{ const f=new Date(y,m-1,1).getDay(); return 1+((8-f)%7)+(n-1)*7; };
+  const k=y-1980, q=Math.floor(k/4);
+  put(1,1,"元日"); put(1,nthMon(1,2),"成人の日"); put(2,11,"建国記念の日"); put(2,23,"天皇誕生日");
+  put(3,Math.floor(20.8431+0.242194*k-q),"春分の日"); put(4,29,"昭和の日"); put(5,3,"憲法記念日"); put(5,4,"みどりの日"); put(5,5,"こどもの日");
+  put(7,nthMon(7,3),"海の日"); put(8,11,"山の日"); put(9,nthMon(9,3),"敬老の日"); put(9,Math.floor(23.2488+0.242194*k-q),"秋分の日");
+  put(10,nthMon(10,2),"スポーツの日"); put(11,3,"文化の日"); put(11,23,"勤労感謝の日");
+  const key=dt=>dt.getFullYear()+"-"+(dt.getMonth()+1)+"-"+dt.getDate();
+  for(const hk of Object.keys(H)){ const [yy,mm,dd]=hk.split("-").map(Number); const dt=new Date(yy,mm-1,dd);
+    if(dt.getDay()===0){ const x=new Date(dt); do{ x.setDate(x.getDate()+1); }while(H[key(x)]); H[key(x)]="振替休日"; } }
+  for(let dt=new Date(y,8,1); dt.getMonth()===8; dt.setDate(dt.getDate()+1)){
+    const p=new Date(dt); p.setDate(p.getDate()-1); const n=new Date(dt); n.setDate(n.getDate()+1);
+    if(!H[key(dt)] && dt.getDay()!==0 && H[key(p)] && H[key(n)]) H[key(dt)]="国民の休日"; }
+  return H;
+}
+
+async function unzipIcs(buf){
+  const v=new DataView(buf), u8=new Uint8Array(buf), out=[];
+  let eo=-1; for(let i=buf.byteLength-22;i>=Math.max(0,buf.byteLength-66000);i--){ if(v.getUint32(i,true)===0x06054b50){ eo=i; break; } }
+  if(eo<0) throw new Error("zip");
+  const n=v.getUint16(eo+10,true); let p=v.getUint32(eo+16,true);
+  for(let i=0;i<n;i++){
+    if(v.getUint32(p,true)!==0x02014b50) break;
+    const method=v.getUint16(p+10,true), csize=v.getUint32(p+20,true), nl=v.getUint16(p+28,true), xl=v.getUint16(p+30,true), cl=v.getUint16(p+32,true), lo=v.getUint32(p+42,true);
+    const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nl));
+    p+=46+nl+xl+cl;
+    if(!/\.ics$/i.test(name)) continue;
+    const ds=lo+30+v.getUint16(lo+26,true)+v.getUint16(lo+28,true);
+    const data=u8.subarray(ds,ds+csize);
+    if(method===0) out.push(new TextDecoder().decode(data));
+    else if(method===8){
+      if(typeof DecompressionStream==="undefined") throw new Error("nodecomp");
+      const st=new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      out.push(await new Response(st).text());
+    }
+  }
+  return out;
+}
+function parseIcsDate(val, P){
+  P=P||{};
+  let m=val.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/);
+  if(!m) return null;
+  if(!m[4] || P.VALUE==="DATE") return { d:new Date(+m[1],+m[2]-1,+m[3]), allDay:true };
+  if(m[7]) return { d:new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])), allDay:false };
+  return { d:new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]), allDay:false };
+}
+function parseDur(s){
+  const m=(s||"").match(/^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/); if(!m) return 0;
+  return ((+(m[2]||0))*7*864e5+(+(m[3]||0))*864e5+(+(m[4]||0))*36e5+(+(m[5]||0))*6e4+(+(m[6]||0))*1e3)*(m[1]==="-"?-1:1);
+}
+function parseIcs(text, winS, winE){
+  text=text.replace(/\r?\n[ \t]/g,"");
+  const raw=[]; let cur=null, depth=0;
+  for(const line of text.split(/\r?\n/)){
+    if(line==="BEGIN:VEVENT"){ cur={p:{},ex:[]}; depth=0; continue; }
+    if(!cur) continue;
+    if(/^BEGIN:/.test(line)){ depth++; continue; }
+    if(/^END:/.test(line)){ if(depth>0){ depth--; continue; } if(line==="END:VEVENT"){ raw.push(cur); cur=null; } continue; }
+    if(depth>0) continue;
+    const i=line.indexOf(":"); if(i<0) continue;
+    const parts=line.slice(0,i).split(";"), N=parts[0].toUpperCase(), P={};
+    parts.slice(1).forEach(x=>{ const j=x.indexOf("="); if(j>0) P[x.slice(0,j).toUpperCase()]=x.slice(j+1).replace(/^"|"$/g,""); });
+    const val=line.slice(i+1);
+    if(N==="EXDATE") val.split(",").forEach(x=>{ const r=parseIcsDate(x,P); if(r) cur.ex.push(+r.d); });
+    else cur.p[N]={val,P};
+  }
+  const unesc=s=>(s||"").replace(/\\n/gi," ").replace(/\\([,;\\])/g,"$1");
+  const overrides={};
+  raw.forEach(e=>{ if(e.p["RECURRENCE-ID"] && e.p.UID){ const r=parseIcsDate(e.p["RECURRENCE-ID"].val,e.p["RECURRENCE-ID"].P); if(r) (overrides[e.p.UID.val]=overrides[e.p.UID.val]||[]).push(+r.d); } });
+  const out=[]; const DOWS={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
+  for(const e of raw){
+    const p=e.p; if(!p.DTSTART) continue;
+    if(p.STATUS && /CANCELLED/i.test(p.STATUS.val)) continue;
+    const st=parseIcsDate(p.DTSTART.val,p.DTSTART.P); if(!st) continue;
+    if(!st.allDay && p.TRANSP && /TRANSPARENT/i.test(p.TRANSP.val)) continue;
+    let dur;
+    if(p.DTEND){ const en=parseIcsDate(p.DTEND.val,p.DTEND.P); dur = en ? (+en.d - +st.d) : 0; }
+    else if(p.DURATION) dur=parseDur(p.DURATION.val);
+    else dur = st.allDay ? 864e5 : 0;
+    if(dur<=0 && !st.allDay) dur = 0;
+    const title=unesc(p.SUMMARY&&p.SUMMARY.val)||"（予定）";
+    const skip=new Set(e.ex.concat(p.UID && !p["RECURRENCE-ID"] ? (overrides[p.UID.val]||[]) : []));
+    const push=s=>{ if(skip.has(+s)) return; const en=new Date(+s+dur); if(en>winS && s<winE) out.push({title, allDay:st.allDay, s:new Date(s), e:en}); };
+    if(!p.RRULE || p["RECURRENCE-ID"]){ push(st.d); continue; }
+    const R={}; p.RRULE.val.split(";").forEach(x=>{ const [k,v]=x.split("="); R[k.toUpperCase()]=v; });
+    const iv=Math.max(1,+(R.INTERVAL||1)), count=R.COUNT?+R.COUNT:Infinity;
+    const until=R.UNTIL ? parseIcsDate(R.UNTIL,{}).d : null;
+    const byday=(R.BYDAY||"").split(",").filter(Boolean).map(x=>{ const m=x.match(/^([+-]?\d+)?([A-Z]{2})$/); return m?{n:m[1]?+m[1]:0,d:DOWS[m[2]]}:null; }).filter(Boolean);
+    const at=(y,mo,d)=>new Date(y,mo,d,st.d.getHours(),st.d.getMinutes(),st.d.getSeconds());
+    let n=0, guard=0;
+    const emit=s=>{ if(s<st.d) return true; if(until && s>until) return false; if(n>=count) return false; if(s>=winE) return false; n++; push(s); return true; };
+    const f=R.FREQ;
+    if(f==="DAILY"){
+      for(let x=new Date(st.d); guard++<20000; x=new Date(x.getFullYear(),x.getMonth(),x.getDate()+iv,x.getHours(),x.getMinutes(),x.getSeconds())){
+        if(byday.length && !byday.some(b=>b.d===x.getDay())) continue; if(!emit(x)) break; }
+    } else if(f==="WEEKLY"){
+      const days=(byday.length?byday.map(b=>b.d):[st.d.getDay()]).sort((a,b)=>((a+6)%7)-((b+6)%7));
+      const off=(st.d.getDay()+6)%7; let wk=new Date(st.d.getFullYear(),st.d.getMonth(),st.d.getDate()-off);
+      outer: for(; guard++<5000; wk=new Date(wk.getFullYear(),wk.getMonth(),wk.getDate()+7*iv)){
+        for(const d of days){ const x=at(wk.getFullYear(),wk.getMonth(),wk.getDate()+((d+6)%7)); if(!emit(x)) break outer; } }
+    } else if(f==="MONTHLY"){
+      for(let mo=0; guard++<1200; mo+=iv){
+        const y=st.d.getFullYear(), m=st.d.getMonth()+mo; let xs=[];
+        if(byday.length){ for(const b of byday){ const first=new Date(y,m,1), last=new Date(y,m+1,0);
+            if(b.n>0){ const d=1+((b.d-first.getDay()+7)%7)+(b.n-1)*7; if(d<=last.getDate()) xs.push(at(y,m,d)); }
+            else if(b.n<0){ const d=last.getDate()-((last.getDay()-b.d+7)%7)+(b.n+1)*7; if(d>=1) xs.push(at(y,m,d)); }
+            else { for(let d=1+((b.d-first.getDay()+7)%7); d<=last.getDate(); d+=7) xs.push(at(y,m,d)); } } }
+        else { const d=R.BYMONTHDAY?+R.BYMONTHDAY:st.d.getDate(); if(d<=new Date(y,m+1,0).getDate()) xs.push(at(y,m,d)); }
+        xs.sort((a,b)=>a-b); let go=true; for(const x of xs){ if(!emit(x)){ go=false; break; } } if(!go) break;
+      }
+    } else if(f==="YEARLY"){
+      for(let k=0; guard++<200; k+=iv){ if(!emit(at(st.d.getFullYear()+k, st.d.getMonth(), st.d.getDate()))) break; }
+    } else push(st.d);
+  }
+  return out;
+}
+
+
+init();
+})();
+</script>
 </body>
 </html>
