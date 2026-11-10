@@ -85,6 +85,12 @@ table.res{border-collapse:collapse;width:100%;font-size:.86rem}
 .res tr.all-ok td:first-child{font-weight:700;color:var(--yes)} .res tr.all-ok{background:var(--yes-bg)}
 .reswrap{overflow-x:auto}
 .loading{color:var(--muted)}
+.grid.fit{width:100%;table-layout:fixed}
+.grid.fit thead th{min-width:0;padding:4px 0;line-height:1.15;font-size:.76rem;overflow:hidden}
+.grid.fit thead th small{display:block;font-size:.6rem;opacity:.7}
+.grid.fit thead th:first-child{width:76px}
+.grid.fit tbody th{min-width:0;padding:0 6px;font-size:.82rem;overflow:hidden}
+.grid.fit td{height:28px;font-size:.92rem}
 </style>
 </head>
 <body>
@@ -283,7 +289,9 @@ function renderHeader(){
 }
 function renderGrid(){
   let h = "<thead><tr><th scope=\"col\">日付</th>";
-  S.times.forEach((t,i)=>{ h += `<th scope="col" data-col="${i}" title="この時間帯を列ごと塗る">${esc(tLabel(t))}</th>`; });
+  const fit = S.times.length>=7; const hm=m=>Math.floor(m/60)+":"+String(m%60).padStart(2,"0");
+  $("grid").className = "grid"+(fit?" fit":""); $("grid").style.minWidth = fit ? (76+S.times.length*30)+"px" : "";
+  S.times.forEach((t,i)=>{ const lab = (fit && t.sMin!=null) ? hm(t.sMin)+"<small>〜"+hm(t.eMin)+"</small>" : esc(tLabel(t)); h += `<th scope="col" data-col="${i}" title="${esc(tLabel(t))}（クリックで列ごと塗る）">${lab}</th>`; });
   h += "</tr></thead><tbody>";
   S.dates.forEach((d,ri)=>{
     const hol = S.holidays[d.key];
