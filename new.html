@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新しい日程調整を作る</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="cal.js"></script>
+<style>
+:root{ color-scheme:light; --bg:#EEF2F4; --surface:#FFFFFF; --ink:#1E2B35; --muted:#5D6B76; --line:#D3DBE0; --accent:#2457A6; --yes:#1F8A68; --no-bg:#E2E6EA; --empty:#F6F8F9; --weekend:#B4473C; --sat:#2457A6; --busy:#B4473C; box-sizing:border-box }
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;font-size:15px;line-height:1.6}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:1.4rem;margin:0 0 .3rem} .lead{color:var(--muted);margin:0 0 14px;font-size:.92rem}
+.layout{display:grid;grid-template-columns:380px 1fr;gap:18px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.panel h2{font-size:1rem;margin:0 0 .6rem}
+label.lab{display:block;font-size:.85rem;color:var(--muted);margin:.6rem 0 .2rem}
+input[type=text],input[type=date],input[type=password],textarea,select{font:inherit;color:inherit;background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:1rem}
+input[type=text],input[type=password],textarea{width:100%} textarea{min-height:56px;font-size:.95rem}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:.4rem 0}
+.days{display:flex;gap:4px;flex-wrap:wrap}
+.days label,.hours label{cursor:pointer;position:relative}
+.days input,.hours input{position:absolute;opacity:0;pointer-events:none}
+.days span,.hours span{display:inline-block;min-width:32px;text-align:center;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:.85rem;background:var(--empty)}
+.days input:checked+span,.hours input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.hours{display:flex;gap:4px;flex-wrap:wrap}
+.btn{font:inherit;color:inherit;background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:.9rem}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn.big{font-size:1.05rem;padding:12px 20px;width:100%}
+.btn:disabled{opacity:.5;cursor:default}
+.tip{font-size:.8rem;color:var(--muted)} .status{font-size:.88rem;margin-top:.5rem;min-height:1.3em} .status.err{color:var(--weekend)} .status.ok{color:var(--yes)}
+.gridbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:60vh}
+table.grid{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+.grid th,.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:4px 8px;font-size:.85rem;white-space:nowrap}
+.grid thead th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:500}
+.grid tbody th{text-align:left;font-weight:500;background:var(--surface)}
+.grid tbody th.sat{color:var(--sat)} .grid tbody th.sun,.grid tbody th.hol{color:var(--weekend)}
+.grid td{text-align:center;color:var(--yes)} .grid td.busy{background:var(--no-bg);color:var(--busy)} .grid td.na{background:repeating-linear-gradient(45deg,transparent 0 4px,var(--line) 4px 5px)}
+.count{font-size:.9rem;margin:.4rem 0;color:var(--muted)} .count b{color:var(--ink)}
+.result{background:#EAF3EE;border:1px solid #BFE0CF;border-radius:10px;padding:14px 16px}
+.result code{display:block;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;word-break:break-all;margin:.3rem 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>新しい日程調整を作る</h1>
+<p class="lead">候補の期間と時間帯を選ぶと回答ページができます。できたURLを参加者にメールで送ってください。</p>
+
+<div class="layout">
+<div>
+  <section class="panel">
+    <h2>1. 調整の内容</h2>
+    <label class="lab" for="title">タイトル（必須）</label>
+    <input type="text" id="title" placeholder="例：○○打ち合わせ 日程調整" maxlength="80">
+    <label class="lab" for="desc">説明（任意）</label>
+    <textarea id="desc" placeholder="例：1時間程度・対面（共同研究棟410）。全員○の枠で決めます。"></textarea>
+    <label class="lab" for="deadline">回答期限（任意・自由記入）</label>
+    <input type="text" id="deadline" placeholder="例：11/20（金）まで" maxlength="40">
+    <label class="lab" for="owner">あなたのお名前（作成者としてそのまま回答できます）</label>
+    <input type="text" id="owner" placeholder="例：新潟 太郎" autocomplete="name">
+  </section>
+
+  <section class="panel">
+    <h2>2. 候補の期間</h2>
+    <div class="row"><input type="date" id="from"><span>〜</span><input type="date" id="to"></div>
+    <label class="lab">曜日</label>
+    <div class="days" id="days"></div>
+    <label class="tip" style="display:block;margin-top:.5rem"><input type="checkbox" id="skipHol" checked> 祝日を除く</label>
+  </section>
+
+  <section class="panel">
+    <h2>3. 時間帯</h2>
+    <div class="row"><span class="tip">所要時間</span>
+      <select id="dur"><option value="30">30分</option><option value="60" selected>60分</option><option value="90">90分</option><option value="120">120分</option></select>
+    </div>
+    <label class="lab">開始時刻（複数選べます）</label>
+    <div class="hours" id="hours"></div>
+    <label class="tip" style="display:block;margin-top:.5rem"><input type="checkbox" id="allDay"> 「終日」の候補も加える</label>
+    <p class="tip">候補が多すぎると回答が大変です。目安は10〜30枠（上限60枠）。</p>
+  </section>
+
+  <section class="panel">
+    <h2>4. あなたの予定を反映（任意）</h2>
+    <p class="tip">候補はそのまま残し、あなた自身の回答として予定のある枠を×にします。作成後に開く回答ページで確認・修正して送信してください。</p>
+    <div class="row"><button class="btn" id="gcal">Googleカレンダーで自動判定</button>
+      <label class="btn" for="icsIn" style="display:inline-block">予定ファイル（.ics/.zip）</label><input type="file" id="icsIn" accept=".ics,.zip" hidden></div>
+    <div class="status" id="calStatus"></div>
+  </section>
+
+  <section class="panel" id="keyBox" hidden>
+    <h2>作成パスワード</h2>
+    <input type="password" id="ckey" placeholder="管理者から聞いた合言葉" autocomplete="off">
+  </section>
+
+  <button class="btn primary big" id="create">この内容で調整を作る</button>
+  <div class="status" id="msg"></div>
+</div>
+
+<div>
+  <div class="count" id="count"></div>
+  <div class="gridbox"><table class="grid" id="grid"></table></div>
+  <p class="tip" style="margin-top:6px">プレビュー：行＝日付、列＝時間帯。灰色は、あなたの予定と重なる枠（候補には残り、あなたの回答で×になります）。</p>
+  <div id="done" hidden style="margin-top:14px"></div>
+</div>
+</div>
+</div>
+
+<script>
+(()=>{
+const API_URL = "https://script.google.com/macros/s/AKfycbyQmdp2E3C5JieViyiFHlVVWEfprXMIbtopA07MYv5KvjcNJ1pcNpE23LpfZMGIzuxEOw/exec";
+const GOOGLE_CLIENT_ID = "336203229850-kcbi74i0ut3d2vqi64gsoj964d81p2t6.apps.googleusercontent.com";
+const DOW = ["日","月","火","水","木","金","土"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+let busyEvents = [];   // [{s:Date,e:Date,allDay,title}]
+let model = null;      // {dates, bands, slots, busyKeys}
+
+async function apiGet(q){ const r=await fetch(API_URL+"?"+q,{redirect:"follow"}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+async function apiPost(obj){ const r=await fetch(API_URL,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(obj)}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+
+function pad(n){ return String(n).padStart(2,"0"); }
+function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function init(){
+  const t=new Date(); const f=new Date(t); f.setDate(f.getDate()+2); const l=new Date(f); l.setDate(l.getDate()+9);
+  $("from").value=ymd(f); $("to").value=ymd(l);
+  $("days").innerHTML=[["月",1],["火",2],["水",3],["木",4],["金",5],["土",6],["日",0]].map(([l,v])=>`<label><input type="checkbox" value="${v}" ${v>=1&&v<=5?"checked":""}><span>${l}</span></label>`).join("");
+  let h=""; for(let m=8*60; m<=20*60; m+=30){ const lab=Math.floor(m/60)+":"+pad(m%60); const on=[600,780,900].includes(m); h+=`<label><input type="checkbox" value="${m}" ${on?"checked":""}><span>${lab}</span></label>`; }
+  $("hours").innerHTML=h;
+  document.querySelectorAll("#from,#to,#dur,#allDay,#skipHol,#days input,#hours input").forEach(el=>el.addEventListener("change", build));
+  $("gcal").addEventListener("click", onGcal);
+  $("icsIn").addEventListener("change", onIcs);
+  $("create").addEventListener("click", create);
+  apiGet("api=config").then(c=>{ if(c && c.needCreateKey) $("keyBox").hidden=false; }).catch(()=>{});
+  build();
+}
+
+function build(){
+  const from=new Date($("from").value+"T00:00:00"), to=new Date($("to").value+"T00:00:00");
+  const dayset=new Set([...document.querySelectorAll("#days input:checked")].map(i=>+i.value));
+  const starts=[...document.querySelectorAll("#hours input:checked")].map(i=>+i.value).sort((a,b)=>a-b);
+  const dur=+$("dur").value, allDay=$("allDay").checked, skipHol=$("skipHol").checked;
+  const bands=starts.map(m=>({sMin:m,eMin:m+dur,key:m+"-"+(m+dur),label:Math.floor(m/60)+":"+pad(m%60)+"〜"+Math.floor((m+dur)/60)+":"+pad((m+dur)%60)}));
+  if(allDay) bands.push({sMin:null,eMin:null,key:"終日",label:"終日"});
+  const dates=[]; const hol={};
+  if(!isNaN(from) && !isNaN(to) && to>=from){
+    for(let y=from.getFullYear(); y<=to.getFullYear(); y++) Object.assign(hol, jpHolidays(y));
+    for(let d=new Date(from); d<=to && dates.length<120; d.setDate(d.getDate()+1)){
+      const k=d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+      if(!dayset.has(d.getDay())) continue;
+      if(skipHol && hol[k]) continue;
+      dates.push({y:d.getFullYear(),mo:d.getMonth()+1,da:d.getDate(),dow:d.getDay(),key:k,hol:hol[k]});
+    }
+  }
+  const slots=[]; const busyKeys={};
+  for(const d of dates) for(const b of bands){
+    const key=d.key+"|"+b.key;
+    const start = b.sMin==null ? `${d.y}-${pad(d.mo)}-${pad(d.da)}T00:00:00+09:00` : `${d.y}-${pad(d.mo)}-${pad(d.da)}T${pad(Math.floor(b.sMin/60))}:${pad(b.sMin%60)}:00+09:00`;
+    const end = b.sMin==null ? `${d.y}-${pad(d.mo)}-${pad(d.da)}T23:59:00+09:00` : `${d.y}-${pad(d.mo)}-${pad(d.da)}T${pad(Math.floor(b.eMin/60))}:${pad(b.eMin%60)}:00+09:00`;
+    const label=`${d.mo}/${d.da}（${DOW[d.dow]}）${b.label}`;
+    // busy?
+    let bz=null;
+    const ss=new Date(d.y,d.mo-1,d.da,0,b.sMin==null?0:b.sMin), se=new Date(d.y,d.mo-1,d.da,0,b.sMin==null?24*60:b.eMin);
+    for(const ev of busyEvents){ if(ev.s<se && ev.e>ss){ bz=ev.title||"予定あり"; break; } }
+    if(bz) busyKeys[key]=bz;
+    slots.push({key,label,start,end});
+  }
+  model={dates,bands,slots,busyKeys};
+  render();
+}
+function render(){
+  const {dates,bands,slots,busyKeys}=model;
+  const nb=Object.keys(busyKeys).length;
+  $("count").innerHTML=`候補 <b>${slots.length}</b> 枠（${dates.length}日 × ${bands.length}時間帯）`+(nb?`　うちあなたの予定と重なる枠 <b>${nb}</b>`:"")+(slots.length>60?`　<span style="color:var(--weekend)">多すぎます（60枠まで）</span>`:"");
+  let h="<thead><tr><th>日付</th>"+bands.map(b=>`<th>${esc(b.label)}</th>`).join("")+"</tr></thead><tbody>";
+  for(const d of dates){
+    const cls=d.hol?"hol":d.dow===0?"sun":d.dow===6?"sat":"";
+    h+=`<tr><th class="${cls}">${d.mo}/${d.da} ${DOW[d.dow]}${d.hol?` <span class="tip">${esc(d.hol)}</span>`:""}</th>`;
+    for(const b of bands){ const k=d.key+"|"+b.key; const bz=busyKeys[k]; h+=`<td class="${bz?"busy":""}" title="${esc(bz||"")}">${bz?"×":"○"}</td>`; }
+    h+="</tr>";
+  }
+  $("grid").innerHTML=h+"</tbody>";
+  $("create").disabled = !slots.length || slots.length>60;
+}
+
+/* --- own calendar --- */
+function window_(){ const {dates}=model; if(!dates.length) return null; const f=dates[0], l=dates[dates.length-1]; return {s:new Date(f.y,f.mo-1,f.da), e:new Date(l.y,l.mo-1,l.da+1)}; }
+function onGcal(){
+  const w=window_(); const st=$("calStatus"); if(!w){ st.className="status err"; st.textContent="先に期間を選んでください。"; return; }
+  st.className="status"; st.textContent="Googleのログイン画面を開いています…";
+  gisFreeBusy(GOOGLE_CLIENT_ID, w.s.toISOString(), w.e.toISOString(), (err,busy)=>{
+    if(err){ st.className="status err"; st.textContent=err.message; return; }
+    busyEvents = busy.map(b=>({title:"予定あり",allDay:false,s:new Date(b.start),e:new Date(b.end)}));
+    build(); st.className="status ok"; st.textContent=`Googleカレンダー：期間内の予定${busyEvents.length}件を読み込みました。`;
+  });
+}
+async function onIcs(e){
+  const files=[...e.target.files]; e.target.value=""; const w=window_(); const st=$("calStatus");
+  if(!files.length||!w) return; st.className="status"; st.textContent="読み込み中…";
+  try{
+    let texts=[]; for(const f of files){ const buf=await f.arrayBuffer(); const head=new Uint8Array(buf,0,2); if(head[0]===0x50&&head[1]===0x4b) texts=texts.concat(await unzipIcs(buf)); else texts.push(new TextDecoder().decode(buf)); }
+    if(!texts.some(t=>/BEGIN:VCALENDAR/.test(t))) throw new Error("ics");
+    busyEvents=[]; texts.forEach(t=>busyEvents.push(...parseIcs(t,w.s,w.e)));
+    build(); st.className="status ok"; st.textContent=`予定ファイル：期間内の予定${busyEvents.length}件を読み込みました。`;
+  }catch(err){ st.className="status err"; st.textContent="ファイルを読み込めませんでした。zipの場合は展開して中の.icsを選んでください。"; }
+}
+
+/* --- create --- */
+async function create(){
+  const msg=$("msg"); const title=$("title").value.trim();
+  if(!title){ msg.className="status err"; msg.textContent="タイトルを入力してください。"; $("title").focus(); return; }
+  const {slots,busyKeys}=model;
+  const btn=$("create"); btn.disabled=true; msg.className="status"; msg.textContent="作成中…";
+  try{
+    const r=await apiPost({ action:"create", createKey:$("ckey").value, event:{ title, description:$("desc").value.trim(), deadline:$("deadline").value.trim() }, slots: slots.map(s=>({label:s.label,start:s.start,end:s.end})) });
+    if(r.error){ msg.className="status err"; msg.textContent=r.error; btn.disabled=false; return; }
+    // 作成者の下書き（予定のある枠を×）を回答ページに引き継ぐ
+    const vals={}, busy={}; for(const k in busyKeys){ vals[k]=3; busy[k]=busyKeys[k]; }
+    try{ localStorage.setItem("sched:"+r.id, JSON.stringify({vals,busy,notes:{},name:$("owner").value.trim(),comment:""})); }catch(e){}
+    msg.className="status ok"; msg.textContent="作成しました。";
+    $("done").hidden=false;
+    $("done").innerHTML=`<div class="result"><b>作成しました。</b>
+      <p style="margin:.5rem 0 .2rem">参加者に送る回答用URL：</p><code id="u1">${esc(r.url)}</code>
+      <p style="margin:.6rem 0 .2rem">あなた専用の管理用URL（締め切り・再開に使います。他の人に送らないでください）：</p><code>${esc(r.adminUrl)}</code>
+      <div class="row" style="margin-top:.6rem"><button class="btn" id="cp">回答用URLをコピー</button><a class="btn primary" href="${esc(r.adminUrl)}">回答ページを開いて自分の回答を送る</a></div>
+      <p class="tip">このページを閉じると管理用URLは再表示できません。ブックマークするか、メールで自分宛に送っておいてください。</p></div>`;
+    $("cp").onclick=()=>navigator.clipboard.writeText(r.url).then(()=>{ $("cp").textContent="コピーしました"; });
+    $("done").scrollIntoView({behavior:"smooth"});
+  }catch(e){ msg.className="status err"; msg.textContent="作成に失敗しました: "+e.message; btn.disabled=false; }
+}
+init();
+})();
+</script>
+</body>
+</html>
