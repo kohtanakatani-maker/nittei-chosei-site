@@ -124,9 +124,9 @@ async function apiPost(obj){ const r=await fetch(API_URL,{method:"POST",redirect
 function pad(n){ return String(n).padStart(2,"0"); }
 function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function init(){
-  const t=new Date(); const f=new Date(t); f.setDate(f.getDate()+2); const l=new Date(f); l.setDate(l.getDate()+9);
+  const t=new Date(); const f=new Date(t); f.setDate(f.getDate()+1); const l=new Date(f); l.setDate(l.getDate()+9);
   $("from").value=ymd(f); $("to").value=ymd(l);
-  $("days").innerHTML=[["月",1],["火",2],["水",3],["木",4],["金",5],["土",6],["日",0]].map(([l,v])=>`<label><input type="checkbox" value="${v}" ${v>=1&&v<=5?"checked":""}><span>${l}</span></label>`).join("");
+  $("days").innerHTML=[["月",1],["火",2],["水",3],["木",4],["金",5],["土",6],["日",0]].map(([l,v])=>`<label><input type="checkbox" value="${v}" checked><span>${l}</span></label>`).join("");
   let h=""; for(let m=8*60; m<=20*60; m+=30){ const lab=Math.floor(m/60)+":"+pad(m%60); const on=[600,780,900].includes(m); h+=`<label><input type="checkbox" value="${m}" ${on?"checked":""}><span>${lab}</span></label>`; }
   $("hours").innerHTML=h;
   document.querySelectorAll("#from,#to,#dur,#allDay,#skipHol,#days input,#hours input").forEach(el=>el.addEventListener("change", build));
