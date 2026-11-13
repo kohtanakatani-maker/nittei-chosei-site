@@ -91,6 +91,26 @@ table.res{border-collapse:collapse;width:100%;font-size:.86rem}
 .grid.fit thead th:first-child{width:76px}
 .grid.fit tbody th{min-width:0;padding:0 6px;font-size:.82rem;overflow:hidden}
 .grid.fit td{height:28px;font-size:.92rem}
+.sum{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:#FAFBFC}
+.sumhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.sum h3{font-size:1rem;margin:0}
+.sum h4{font-size:.9rem;margin:.9rem 0 .4rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font:inherit;font-size:.8rem;border:1px solid var(--line);border-radius:14px;padding:1px 10px;background:var(--surface);cursor:pointer}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}.chip.clear{border-style:dashed;color:var(--muted)}
+.cands{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.cand{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--surface)}.cand.best{border:2px solid var(--yes)}
+.cand .rk{font-size:.75rem;color:var(--muted)}.cand .d{font-weight:700}
+.badge{font-size:.72rem;font-weight:700;background:var(--yes-bg);color:var(--yes);border-radius:4px;padding:0 6px}
+.sb{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0;background:var(--no-bg)}.sb .o{background:var(--yes)}.sb .m{background:#E0B25A}.sb .x{background:#B9C1C8}
+.cnt{font-size:.82rem}.who{font-size:.78rem;color:var(--muted);margin-top:3px}
+.sum2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}@media (max-width:700px){.sum2{grid-template-columns:1fr}}
+.mon{font-size:.8rem;font-weight:700;margin:.3rem 0 .2rem}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;max-width:420px}.cal .h{text-align:center;font-size:.72rem;color:var(--muted)}
+.hc{position:relative;min-height:34px;border-radius:5px;padding:2px 5px;font-size:.72rem;line-height:1.3}.hc b{font-size:.85rem}.hc span{position:absolute;right:4px;bottom:1px;font-size:.66rem}
+.hc.na{background:transparent;color:#B0B8BF}.hc.na span{display:none}.hc.full{outline:2px solid var(--ink);outline-offset:-2px}.hc.mx{background-image:repeating-linear-gradient(45deg,transparent 0 4px,var(--line) 4px 5px)}
+.heatwrap{overflow-x:auto}.heat{display:grid;gap:2px;min-width:max-content}.heat .h{font-size:.66rem;color:var(--muted);text-align:center}.heat .dl{font-size:.72rem;white-space:nowrap;padding-right:4px}.heat .hc{min-height:22px;padding:0}.heat .hc span{left:0;right:0;text-align:center;bottom:3px}
+.lg{display:flex;gap:3px;align-items:center;font-size:.72rem;color:var(--muted);margin-top:6px}.lg i{display:inline-block;width:16px;height:9px;border-radius:2px}
+.near{margin:0;padding-left:1.1rem;font-size:.85rem}
+details.tbl summary{font-weight:700;color:var(--ink);font-size:.9rem;margin:.4rem 0}
 .namebtn{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .namebtn .lk{font-size:.7rem;font-weight:500;color:var(--muted);margin-left:2px}
 .editbanner{background:var(--maybe-bg);border:1px solid var(--maybe);border-radius:8px;padding:8px 10px;margin-top:.6rem;font-size:.86rem}
@@ -342,23 +362,100 @@ function counts(){
   let c=[0,0,0,0]; for(const k in S.cell){ c[S.vals[k]||0]++; }
   $("counts").innerHTML = `<span>○ <b>${c[0]+c[1]}</b></span><span>△ <b>${c[2]}</b></span><span>× <b>${c[3]}</b></span>`;
 }
+let MUST = new Set(); // 必須参加者（この画面の中だけ）
+let SORTED = false;   // 回答表を参加できる人が多い順に
+function slotStats(){
+  const people=DATA.respondents, st={};
+  DATA.slots.forEach(s=>{ const r={s, o:0, m:0, x:0, mN:[], xN:[], mustX:false};
+    people.forEach(p=>{ const a=p.answers[s.slot_id]||"○";
+      if(a==="○") r.o++; else if(a==="△"){ r.m++; r.mN.push(p.name); } else { r.x++; r.xN.push(p.name); if(MUST.has(p.name)) r.mustX=true; } });
+    r.score=r.o+0.5*r.m; st[s.slot_id]=r; });
+  return st;
+}
+function rankCmp(a,b){ return (b.score-a.score) || (a.x-b.x) || (String(a.s.start)<String(b.s.start)?-1:1); }
+function heatColor(n,total){
+  if(!total||n<=0) return ["#EEF1F3","var(--ink)"];
+  const r=n/total;
+  if(r>=1) return ["#17785A","#fff"]; if(r>=0.8) return ["#2E9C72","#fff"]; if(r>=0.6) return ["#7CC6A6","var(--ink)"]; if(r>=0.4) return ["#B5DFCB","var(--ink)"]; return ["#DCEFE6","var(--ink)"];
+}
+function namesTxt(a){ return a.map(esc).join("、"); }
+function renderSummary(st){
+  const people=DATA.respondents, N=people.length, all=Object.values(st);
+  let h='<div class="sum">';
+  h+='<div class="sumhead"><h3>候補日のまとめ</h3><span class="tip">回答 '+N+'人分の集計（○=1点、△=0.5点）</span></div>';
+  h+='<div class="tip" style="margin:.2rem 0">必須参加者を選ぶと、その人が×の日を除いて並べ直します（この画面の中だけで使い、保存はしません）。</div><div class="chips">';
+  people.forEach(p=> h+='<button class="chip'+(MUST.has(p.name)?' on':'')+'" data-must="'+esc(p.name)+'">'+esc(p.name)+'</button>');
+  if(MUST.size) h+='<button class="chip clear" data-must="">選択を解除</button>';
+  h+='</div>';
+  const ok=all.filter(r=>!r.mustX).sort(rankCmp), top=ok.slice(0,3);
+  h+='<h4>有力候補</h4>';
+  if(!top.length) h+='<p class="tip">必須参加者が全員参加できる候補はありません。</p>';
+  else { h+='<div class="cands">';
+    top.forEach((r,i)=>{ const full=r.o===N;
+      h+='<div class="cand'+(i===0?' best':'')+'"><div class="rk">'+(i+1)+'位'+(full?' <span class="badge">全員○</span>':'')+'</div><div class="d">'+esc(r.s.label)+'</div>';
+      h+='<div class="sb">'+(r.o?'<i class="o" style="flex:'+r.o+'"></i>':'')+(r.m?'<i class="m" style="flex:'+r.m+'"></i>':'')+(r.x?'<i class="x" style="flex:'+r.x+'"></i>':'')+'</div>';
+      h+='<div class="cnt">○ <b>'+r.o+'</b>　△ '+r.m+'　× '+r.x+'</div><div class="who">';
+      if(full) h+='全員参加できます';
+      else { const w=[]; if(r.mN.length) w.push('△：'+namesTxt(r.mN)); if(r.xN.length) w.push('×：'+namesTxt(r.xN)+(r.x<=2?'（あと'+r.x+'人で全員）':'')); h+=w.join('<br>'); }
+      h+='</div></div>'; });
+    h+='</div>'; }
+  h+='<div class="sum2"><div><h4>カレンダーで見る <span class="tip">色が濃いほど参加できる人が多い・枠＝全員○</span></h4>'+renderHeat(st,N)+'</div>';
+  const near=all.filter(r=>!r.mustX && r.x>=1 && r.x<=2).sort((a,b)=>(a.x-b.x)||(b.score-a.score)).slice(0,8);
+  h+='<div><h4>あと少しの日 <span class="tip">×が1〜2人だけ</span></h4>';
+  h+= near.length ? '<ul class="near">'+near.map(r=>'<li>'+esc(r.s.label)+'　<span class="tip">×</span> '+namesTxt(r.xN)+'</li>').join('')+'</ul>' : '<p class="tip">該当する日はありません。</p>';
+  h+='</div></div></div>';
+  return h;
+}
+function renderHeat(st,N){
+  const legend='<div class="lg">少ない'+[0.2,0.5,0.7,0.9,1].map(r=>'<i style="background:'+heatColor(r*N||r,N||1)[0]+'"></i>').join('')+'多い</div>';
+  const cell=(r,label)=>{ if(!r) return '<div class="hc na"></div>';
+    const [bg,fg]=heatColor(r.o,N), full=r.o===N;
+    return '<div class="hc'+(full?' full':'')+(r.mustX?' mx':'')+'" style="background:'+(r.mustX?'#EEF1F3':bg)+';color:'+(r.mustX?'var(--muted)':fg)+'" title="'+esc(r.s.label)+'　○'+r.o+' △'+r.m+' ×'+r.x+'">'+label+'<span>○'+r.o+'</span></div>'; };
+  if(S.times.length===1){ // 1日1枠 → 月のカレンダー
+    const byDay={}; S.dates.forEach(d=>{ const s=S.cell[d.key+"|"+S.times[0].key]; if(s) byDay[d.key]=st[s.slot_id]; });
+    const f=S.dates[0], l=S.dates[S.dates.length-1]; let h='';
+    for(let y=f.y,m=f.mo; y<l.y || (y===l.y && m<=l.mo); m===12?(y++,m=1):m++){
+      h+='<div class="mon">'+y+'年'+m+'月</div><div class="cal">'+'月火水木金土日'.split('').map(w=>'<div class="h">'+w+'</div>').join('');
+      const lead=(new Date(y,m-1,1).getDay()+6)%7; for(let i=0;i<lead;i++) h+='<div></div>';
+      const days=new Date(y,m,0).getDate();
+      for(let d=1; d<=days; d++){ const r=byDay[y+"-"+m+"-"+d]; h+= r ? cell(r,'<b>'+d+'</b>') : '<div class="hc na"><b>'+d+'</b></div>'; }
+      h+='</div>';
+    }
+    return h+legend;
+  }
+  // 複数枠 → 日付×時間の格子
+  const hm=x=>Math.floor(x/60)+":"+String(x%60).padStart(2,"0");
+  let h='<div class="heatwrap"><div class="heat" style="grid-template-columns:72px repeat('+S.times.length+',minmax(30px,1fr))"><div></div>';
+  S.times.forEach(t=> h+='<div class="h">'+(t.sMin==null?'終日':hm(t.sMin))+'</div>');
+  S.dates.forEach(d=>{ h+='<div class="dl">'+d.mo+'/'+d.da+'（'+DOW[d.dow]+'）</div>';
+    S.times.forEach(t=>{ const s=S.cell[d.key+"|"+t.key]; h+=cell(s?st[s.slot_id]:null,''); }); });
+  return h+'</div></div>'+legend;
+}
 function renderResults(){
   const people = DATA.respondents, slots = DATA.slots;
-  $("resCount").textContent = people.length ? "" : "";
+  $("resCount").textContent = people.length ? "（"+people.length+"人）" : "";
   if(!people.length){ $("results").innerHTML = '<p class="tip">まだ回答はありません。</p>'; return; }
-  const tally={}; slots.forEach(s=>tally[s.slot_id]={o:0,m:0});
-  people.forEach(p=>slots.forEach(s=>{ const a=p.answers[s.slot_id]; if(a==="○") tally[s.slot_id].o++; else if(a==="△") tally[s.slot_id].m++; }));
-  let h='<div class="reswrap"><table class="res"><tr><th>候補</th>';
+  [...MUST].forEach(n=>{ if(!people.some(p=>p.name===n)) MUST.delete(n); });
+  const st=slotStats();
+  let h=renderSummary(st);
+  const rows = SORTED ? slots.slice().sort((a,b)=>rankCmp(st[a.slot_id],st[b.slot_id])) : slots;
+  h+='<details class="tbl"'+(slots.length<=12?' open':'')+'><summary>全員の回答表</summary>';
+  h+='<div class="row"><button class="btn" id="sortRes">'+(SORTED?'日付順に戻す':'参加できる人が多い順に並べる')+'</button></div>';
+  h+='<div class="reswrap"><table class="res"><tr><th>候補</th>';
   people.forEach(p=> h+='<th><button class="namebtn" data-name="'+esc(p.name)+'" title="クリックで修正・削除">'+esc(p.name)+'</button></th>'); h+='<th>○</th></tr>';
-  slots.forEach(s=>{ const t=tally[s.slot_id], all = t.o===people.length;
+  rows.forEach(s=>{ const t=st[s.slot_id], all = t.o===people.length;
     h+='<tr class="'+(all?"all-ok":"")+'"><td>'+esc(s.label)+'</td>';
     people.forEach(p=> h+='<td>'+esc(p.answers[s.slot_id]||"－")+'</td>');
     h+='<td>'+t.o+(t.m?' <span class="tip">(△'+t.m+')</span>':'')+'</td></tr>'; });
-  h+='</table></div>';
+  h+='</table></div></details>';
   const cm=people.filter(p=>p.comment); if(cm.length) h+='<p class="tip">'+cm.map(p=>esc(p.name)+'：'+esc(p.comment)).join('<br>')+'</p>';
-  h+='<p class="tip">回答の修正・削除は、自分のお名前をクリックしてパスワードを入れてください。</p>';
+  h+='<p class="tip">回答の修正・削除は、回答表で自分のお名前をクリックしてパスワードを入れてください。</p>';
+  const open = $("results").querySelector("details.tbl"); const wasOpen = open ? open.open : null;
   $("results").innerHTML=h;
+  if(wasOpen!==null) $("results").querySelector("details.tbl").open = wasOpen;
   $("results").querySelectorAll(".namebtn").forEach(b=> b.addEventListener("click", ()=> openEditBox(b.dataset.name)));
+  $("results").querySelectorAll("[data-must]").forEach(b=> b.addEventListener("click", ()=>{ const n=b.dataset.must; if(!n) MUST.clear(); else if(MUST.has(n)) MUST.delete(n); else MUST.add(n); renderResults(); }));
+  $("sortRes").addEventListener("click", ()=>{ SORTED=!SORTED; renderResults(); });
 }
 
 /* ---------- 回答の修正・削除（パスワード） ---------- */
