@@ -41,9 +41,9 @@ header p{margin:.35rem 0 0;color:var(--muted);white-space:pre-wrap}
 .days input{position:absolute;opacity:0;pointer-events:none}
 .days span{display:inline-block;min-width:30px;text-align:center;padding:3px 0;border:1px solid var(--line);border-radius:6px;font-size:.85rem;background:var(--empty)}
 .days input:checked+span{background:var(--ink);color:var(--surface);border-color:var(--ink)}
-select,button,textarea,input[type=text]{font:inherit;color:inherit}
+select,button,textarea,input[type=text],input[type=password]{font:inherit;color:inherit}
 select{background:var(--empty);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
-input[type=text],textarea{width:100%;background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:1rem}
+input[type=text],input[type=password],textarea{width:100%;background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:1rem}
 textarea{min-height:60px;font-size:.95rem}
 .btn{background:var(--empty);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:.88rem}
 .btn:hover{border-color:var(--muted)}
@@ -91,6 +91,12 @@ table.res{border-collapse:collapse;width:100%;font-size:.86rem}
 .grid.fit thead th:first-child{width:76px}
 .grid.fit tbody th{min-width:0;padding:0 6px;font-size:.82rem;overflow:hidden}
 .grid.fit td{height:28px;font-size:.92rem}
+.namebtn{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.namebtn .lk{font-size:.7rem;font-weight:500;color:var(--muted);margin-left:2px}
+.editbanner{background:var(--maybe-bg);border:1px solid var(--maybe);border-radius:8px;padding:8px 10px;margin-top:.6rem;font-size:.86rem}
+.editbanner .row{margin:.4rem 0 0}
+.btn.danger{color:var(--weekend);border-color:var(--weekend)}
+input[readonly]{opacity:.75}
 </style>
 </head>
 <body>
@@ -118,7 +124,13 @@ table.res{border-collapse:collapse;width:100%;font-size:.86rem}
   <section class="panel">
     <h2>お名前</h2>
     <input type="text" id="name" placeholder="例：新潟 太郎" autocomplete="name">
-    <p class="tip">同じお名前で再送信すると上書きされます。</p>
+    <label class="lab" for="pw" id="pwLab">修正・削除用パスワード（任意）</label>
+    <input type="password" id="pw" placeholder="4文字以上" autocomplete="new-password">
+    <p class="tip" id="nameTip">パスワードを決めておくと、あとで下の「回答状況」のお名前をクリックして修正・削除できます。パスワードなしの場合は、同じお名前で再送信すると上書きされます。</p>
+    <div class="editbanner" id="editBanner" hidden>
+      <div id="editBannerText"></div>
+      <div class="row"><button class="btn danger" id="delMine">この回答を削除</button><button class="btn" id="cancelEdit">修正をやめる</button></div>
+    </div>
   </section>
 
   <section class="panel">
@@ -190,6 +202,16 @@ table.res{border-collapse:collapse;width:100%;font-size:.86rem}
   <section class="panel" style="margin-top:14px">
     <h2>回答状況 <span class="tip" id="resCount"></span></h2>
     <div id="results"></div>
+    <div class="panel" id="editBox" style="margin-top:10px;background:var(--empty)" hidden>
+      <h2 id="editTitle"></h2>
+      <div id="editPwRow">
+        <label class="lab" for="editPw">回答のときに決めたパスワード</label>
+        <div class="row" style="flex-wrap:nowrap"><input type="password" id="editPw" autocomplete="current-password" style="flex:1"><button class="btn primary" id="editOpen">開く</button></div>
+      </div>
+      <p class="tip" id="editNote"></p>
+      <div class="row"><button class="btn danger" id="ownerDel" hidden>作成者としてこの回答を削除</button><button class="btn" id="editClose">閉じる</button></div>
+      <div class="status" id="editMsg" role="status"></div>
+    </div>
   </section>
 </div>
 </div>
@@ -208,6 +230,7 @@ const MARK = ["○","○","△","×"], MARKV = {"○":1,"△":2,"×":3};
 let DATA = null; // {event, slots, respondents}
 let S = { dates:[], times:[], cell:{}, vals:{}, busy:{}, notes:{}, holidays:{} };
 let brush = 3, hist = [];
+let EDIT = null; // {name, pw} 修正中の回答
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -270,7 +293,7 @@ function renderHeader(){
   const closed = ev.status && ev.status!=="open";
   $("evMeta").innerHTML = (ev.deadline?"回答期限: "+esc(ev.deadline)+"　":"") + "候補 "+Object.keys(S.cell).length+" 枠（"+S.dates.length+"日）　回答者 "+DATA.respondents.length+" 名" + (closed?"　<b>（締め切り済み）</b>":"");
   if(closed){ $("submit").disabled=true; $("submit").textContent="この調整は締め切られています"; }
-  else { $("submit").disabled=false; $("submit").textContent="この内容で回答を送信する"; }
+  else { $("submit").disabled=false; $("submit").textContent= EDIT ? "修正を送信する" : "この内容で回答を送信する"; }
   if(OWNER_KEY){
     $("ownerBox").hidden=false;
     const share = location.origin+location.pathname+"?e="+encodeURIComponent(EVENT_ID);
@@ -324,14 +347,92 @@ function renderResults(){
   const tally={}; slots.forEach(s=>tally[s.slot_id]={o:0,m:0});
   people.forEach(p=>slots.forEach(s=>{ const a=p.answers[s.slot_id]; if(a==="○") tally[s.slot_id].o++; else if(a==="△") tally[s.slot_id].m++; }));
   let h='<div class="reswrap"><table class="res"><tr><th>候補</th>';
-  people.forEach(p=> h+='<th>'+esc(p.name)+'</th>'); h+='<th>○</th></tr>';
+  people.forEach(p=> h+='<th><button class="namebtn" data-name="'+esc(p.name)+'" title="クリックで修正・削除">'+esc(p.name)+(p.hasPassword?'<span class="lk">（PW）</span>':'')+'</button></th>'); h+='<th>○</th></tr>';
   slots.forEach(s=>{ const t=tally[s.slot_id], all = t.o===people.length;
     h+='<tr class="'+(all?"all-ok":"")+'"><td>'+esc(s.label)+'</td>';
     people.forEach(p=> h+='<td>'+esc(p.answers[s.slot_id]||"－")+'</td>');
     h+='<td>'+t.o+(t.m?' <span class="tip">(△'+t.m+')</span>':'')+'</td></tr>'; });
   h+='</table></div>';
   const cm=people.filter(p=>p.comment); if(cm.length) h+='<p class="tip">'+cm.map(p=>esc(p.name)+'：'+esc(p.comment)).join('<br>')+'</p>';
+  h+='<p class="tip">お名前をクリックすると、パスワードを入れて自分の回答を修正・削除できます（（PW）はパスワード設定済み）。</p>';
   $("results").innerHTML=h;
+  $("results").querySelectorAll(".namebtn").forEach(b=> b.addEventListener("click", ()=> openEditBox(b.dataset.name)));
+}
+
+/* ---------- 回答の修正・削除（パスワード） ---------- */
+function openEditBox(name){
+  const p = DATA.respondents.find(r=>r.name===name); if(!p) return;
+  const closed = DATA.event.status && DATA.event.status!=="open";
+  $("editBox").hidden=false; $("editMsg").textContent=""; $("editMsg").className="status"; $("editPw").value="";
+  $("editTitle").textContent = "「"+name+"」さんの回答";
+  $("editBox").dataset.name = name;
+  $("ownerDel").hidden = !OWNER_KEY;
+  if(closed){ $("editPwRow").hidden=true; $("editNote").textContent="この調整は締め切られているため、修正・削除はできません。"; }
+  else if(p.hasPassword){ $("editPwRow").hidden=false; $("editNote").textContent="パスワードが合うと、上の表に回答が読み込まれ、修正や削除ができます。"; setTimeout(()=>$("editPw").focus(),0); }
+  else { $("editPwRow").hidden=true; $("editNote").textContent="この回答にはパスワードが設定されていないため、ここからは修正・削除できません。同じお名前で送信し直すと上書きでき、そのときにパスワードも設定できます。削除が必要な場合は作成者にご連絡ください。"; }
+  $("editBox").scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+async function unlockEdit(){
+  const name=$("editBox").dataset.name, pw=$("editPw").value, m=$("editMsg");
+  if(!pw){ m.className="status err"; m.textContent="パスワードを入力してください。"; return; }
+  m.className="status"; m.textContent="確認中…"; $("editOpen").disabled=true;
+  try{
+    const r = await apiPost({action:"verifyResponse", eventId:EVENT_ID, name, password:pw});
+    if(r.error){ m.className="status err"; m.textContent=r.error; return; }
+    const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; }
+    const p = DATA.respondents.find(x=>x.name===name);
+    if(!p){ m.className="status err"; m.textContent="回答が見つかりませんでした。"; return; }
+    enterEdit(p, pw);
+    $("editBox").hidden=true;
+  }catch(e){ m.className="status err"; m.textContent="確認に失敗しました: "+e.message; }
+  finally{ $("editOpen").disabled=false; }
+}
+function loadAnswers(p){
+  snapshot(); S.vals={};
+  for(const k in S.cell){ const a=p.answers[S.cell[k].slot_id]; if(a && MARKV[a]) S.vals[k]=MARKV[a]; }
+  $("comment").value = p.comment||"";
+  renderGrid(); persist();
+}
+function enterEdit(p, pw){
+  EDIT = { name:p.name, pw };
+  loadAnswers(p);
+  $("name").value=p.name; $("name").readOnly=true;
+  $("pwLab").textContent="パスワードを変更する場合のみ入力"; $("pw").value=""; $("pw").placeholder="変更しない場合は空欄";
+  $("editBannerText").innerHTML = "<b>「"+esc(p.name)+"」さんの回答を修正中です。</b>表を塗り直して「修正を送信する」を押してください。";
+  $("editBanner").hidden=false;
+  $("submit").textContent="修正を送信する";
+  $("msg").className="status"; $("msg").textContent="回答を読み込みました。";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function exitEdit(){
+  EDIT=null; $("name").readOnly=false; $("editBanner").hidden=true;
+  $("pwLab").textContent="修正・削除用パスワード（任意）"; $("pw").placeholder="4文字以上"; $("pw").value="";
+  renderHeader();
+}
+async function deleteMine(){
+  if(!EDIT) return;
+  if(!confirm("「"+EDIT.name+"」さんの回答を削除します。元に戻せません。よろしいですか？")) return;
+  const m=$("msg"); m.className="status"; m.textContent="削除しています…";
+  try{
+    const r = await apiPost({action:"deleteResponse", eventId:EVENT_ID, name:EDIT.name, password:EDIT.pw});
+    if(r.error){ m.className="status err"; m.textContent=r.error; return; }
+    exitEdit(); $("name").value=""; $("comment").value=""; S.vals={}; renderGrid(); persist();
+    m.className="status ok"; m.textContent="回答を削除しました。";
+    const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; renderHeader(); renderResults(); }
+  }catch(e){ m.className="status err"; m.textContent="削除に失敗しました: "+e.message; }
+}
+async function ownerDelete(){
+  const name=$("editBox").dataset.name, m=$("editMsg");
+  if(!confirm("作成者として「"+name+"」さんの回答を削除します。元に戻せません。よろしいですか？")) return;
+  m.className="status"; m.textContent="削除しています…";
+  try{
+    const r = await apiPost({action:"ownerDeleteResponse", eventId:EVENT_ID, ownerKey:OWNER_KEY, name});
+    if(r.error){ m.className="status err"; m.textContent=r.error; return; }
+    if(EDIT && EDIT.name===name) exitEdit();
+    const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; renderHeader(); renderResults(); }
+    $("editBox").hidden=true;
+    $("msg").className="status ok"; $("msg").textContent="「"+name+"」さんの回答を削除しました。";
+  }catch(e){ m.className="status err"; m.textContent="削除に失敗しました: "+e.message; }
 }
 
 /* ---------- interaction ---------- */
@@ -362,6 +463,12 @@ function wire(){
   $("submit").addEventListener("click", submit);
   $("icsIn").addEventListener("change", onIcs);
   $("loadCal").addEventListener("click", onGcal);
+  $("editOpen").addEventListener("click", unlockEdit);
+  $("editPw").addEventListener("keydown", e=>{ if(e.key==="Enter") unlockEdit(); });
+  $("editClose").addEventListener("click", ()=>{ $("editBox").hidden=true; });
+  $("ownerDel").addEventListener("click", ownerDelete);
+  $("delMine").addEventListener("click", deleteMine);
+  $("cancelEdit").addEventListener("click", ()=>{ exitEdit(); $("name").value=""; $("msg").className="status"; $("msg").textContent="修正をやめました（送信はしていません）。"; persist(); });
 }
 function setBrush(v){ brush=v; document.querySelectorAll(".brush").forEach(b=> b.setAttribute("aria-pressed", String(+b.dataset.v===v))); }
 function undo(){ if(!hist.length) return; S.vals=JSON.parse(hist.pop()); $("undo").disabled=!hist.length; renderGrid(); persist(); }
@@ -383,6 +490,8 @@ function applyRule(v, dayset, from, to, opts={}){
 function prefillFromExisting(){
   const nm=$("name").value.trim(); if(!nm) return;
   const p = DATA.respondents.find(r=>r.name===nm); if(!p) return;
+  if(EDIT) return;
+  if(p.hasPassword){ $("msg").className="status err"; $("msg").textContent="「"+nm+"」さんの回答はパスワードで保護されています。修正するときは、下の回答状況でお名前をクリックしてください。"; return; }
   if(Object.keys(S.vals).length && !confirm("「"+nm+"」さんの前回の回答を読み込みますか？（今の塗りは置き換わります）")) return;
   snapshot(); S.vals={};
   for(const k in S.cell){ const a=p.answers[S.cell[k].slot_id]; if(a && MARKV[a]) S.vals[k]=MARKV[a]; }
@@ -397,10 +506,19 @@ function submit(){
   if(!name){ msg.className="status err"; msg.textContent="お名前を入力してください。"; $("name").focus(); return; }
   const answers={}; for(const k in S.cell){ answers[S.cell[k].slot_id] = MARK[S.vals[k]||0]; }
   const btn=$("submit"); btn.disabled=true; msg.className="status"; msg.textContent="送信中…";
-  apiPost({ action:"submit", eventId:EVENT_ID, name, answers, comment:$("comment").value }).then(async r=>{
+  const newPw = $("pw").value;
+  if(newPw && newPw.length<4){ msg.className="status err"; msg.textContent="パスワードは4文字以上にしてください。"; $("pw").focus(); return; }
+  const payload = { action:"submit", eventId:EVENT_ID, name, answers, comment:$("comment").value };
+  if(newPw) payload.newPassword = newPw;
+  if(EDIT && EDIT.name===name) payload.password = EDIT.pw;
+  apiPost(payload).then(async r=>{
     btn.disabled=false;
     if(r && r.error){ msg.className="status err"; msg.textContent=r.error; return; }
-    msg.className="status ok"; msg.textContent="送信しました。ありがとうございます。";
+    const wasEdit = !!EDIT;
+    if(EDIT && newPw) EDIT.pw = newPw;
+    $("pw").value="";
+    msg.className="status ok";
+    msg.textContent = (wasEdit ? "修正を送信しました。" : "送信しました。ありがとうございます。") + (newPw ? "パスワードを設定しました。修正・削除のときに使うので控えておいてください。" : "");
     try{ const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; renderHeader(); renderResults(); } }catch(e){}
   }).catch(e=>{ btn.disabled=false; msg.className="status err"; msg.textContent="送信に失敗しました: "+e.message; });
 }
