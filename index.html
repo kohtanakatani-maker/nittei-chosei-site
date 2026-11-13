@@ -124,9 +124,9 @@ input[readonly]{opacity:.75}
   <section class="panel">
     <h2>お名前</h2>
     <input type="text" id="name" placeholder="例：新潟 太郎" autocomplete="name">
-    <label class="lab" for="pw" id="pwLab">修正・削除用パスワード（任意）</label>
+    <label class="lab" for="pw" id="pwLab">修正・削除用パスワード（必須）</label>
     <input type="password" id="pw" placeholder="4文字以上" autocomplete="new-password">
-    <p class="tip" id="nameTip">パスワードを決めておくと、あとで下の「回答状況」のお名前をクリックして修正・削除できます。パスワードなしの場合は、同じお名前で再送信すると上書きされます。</p>
+    <p class="tip" id="nameTip">あとで回答を直すときは、下の「回答状況」で自分のお名前をクリックし、このパスワードを入れます。忘れないよう控えておいてください。</p>
     <div class="editbanner" id="editBanner" hidden>
       <div id="editBannerText"></div>
       <div class="row"><button class="btn danger" id="delMine">この回答を削除</button><button class="btn" id="cancelEdit">修正をやめる</button></div>
@@ -231,6 +231,7 @@ let DATA = null; // {event, slots, respondents}
 let S = { dates:[], times:[], cell:{}, vals:{}, busy:{}, notes:{}, holidays:{} };
 let brush = 3, hist = [];
 let EDIT = null; // {name, pw} 修正中の回答
+let DONE = false; // このページから新規回答を送信済み
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
@@ -293,6 +294,7 @@ function renderHeader(){
   const closed = ev.status && ev.status!=="open";
   $("evMeta").innerHTML = (ev.deadline?"回答期限: "+esc(ev.deadline)+"　":"") + "候補 "+Object.keys(S.cell).length+" 枠（"+S.dates.length+"日）　回答者 "+DATA.respondents.length+" 名" + (closed?"　<b>（締め切り済み）</b>":"");
   if(closed){ $("submit").disabled=true; $("submit").textContent="この調整は締め切られています"; }
+  else if(DONE && !EDIT){ $("submit").disabled=true; $("submit").textContent="送信済みです（修正はお名前をクリック）"; }
   else { $("submit").disabled=false; $("submit").textContent= EDIT ? "修正を送信する" : "この内容で回答を送信する"; }
   if(OWNER_KEY){
     $("ownerBox").hidden=false;
@@ -347,14 +349,14 @@ function renderResults(){
   const tally={}; slots.forEach(s=>tally[s.slot_id]={o:0,m:0});
   people.forEach(p=>slots.forEach(s=>{ const a=p.answers[s.slot_id]; if(a==="○") tally[s.slot_id].o++; else if(a==="△") tally[s.slot_id].m++; }));
   let h='<div class="reswrap"><table class="res"><tr><th>候補</th>';
-  people.forEach(p=> h+='<th><button class="namebtn" data-name="'+esc(p.name)+'" title="クリックで修正・削除">'+esc(p.name)+(p.hasPassword?'<span class="lk">（PW）</span>':'')+'</button></th>'); h+='<th>○</th></tr>';
+  people.forEach(p=> h+='<th><button class="namebtn" data-name="'+esc(p.name)+'" title="クリックで修正・削除">'+esc(p.name)+'</button></th>'); h+='<th>○</th></tr>';
   slots.forEach(s=>{ const t=tally[s.slot_id], all = t.o===people.length;
     h+='<tr class="'+(all?"all-ok":"")+'"><td>'+esc(s.label)+'</td>';
     people.forEach(p=> h+='<td>'+esc(p.answers[s.slot_id]||"－")+'</td>');
     h+='<td>'+t.o+(t.m?' <span class="tip">(△'+t.m+')</span>':'')+'</td></tr>'; });
   h+='</table></div>';
   const cm=people.filter(p=>p.comment); if(cm.length) h+='<p class="tip">'+cm.map(p=>esc(p.name)+'：'+esc(p.comment)).join('<br>')+'</p>';
-  h+='<p class="tip">お名前をクリックすると、パスワードを入れて自分の回答を修正・削除できます（（PW）はパスワード設定済み）。</p>';
+  h+='<p class="tip">回答の修正・削除は、自分のお名前をクリックしてパスワードを入れてください。</p>';
   $("results").innerHTML=h;
   $("results").querySelectorAll(".namebtn").forEach(b=> b.addEventListener("click", ()=> openEditBox(b.dataset.name)));
 }
@@ -369,7 +371,7 @@ function openEditBox(name){
   $("ownerDel").hidden = !OWNER_KEY;
   if(closed){ $("editPwRow").hidden=true; $("editNote").textContent="この調整は締め切られているため、修正・削除はできません。"; }
   else if(p.hasPassword){ $("editPwRow").hidden=false; $("editNote").textContent="パスワードが合うと、上の表に回答が読み込まれ、修正や削除ができます。"; setTimeout(()=>$("editPw").focus(),0); }
-  else { $("editPwRow").hidden=true; $("editNote").textContent="この回答にはパスワードが設定されていないため、ここからは修正・削除できません。同じお名前で送信し直すと上書きでき、そのときにパスワードも設定できます。削除が必要な場合は作成者にご連絡ください。"; }
+  else { $("editPwRow").hidden=true; $("editNote").textContent="この回答にはパスワードが設定されていないため、ここからは修正・削除できません。修正・削除が必要な場合は作成者にご連絡ください。"; }
   $("editBox").scrollIntoView({block:"nearest", behavior:"smooth"});
 }
 async function unlockEdit(){
@@ -400,13 +402,13 @@ function enterEdit(p, pw){
   $("pwLab").textContent="パスワードを変更する場合のみ入力"; $("pw").value=""; $("pw").placeholder="変更しない場合は空欄";
   $("editBannerText").innerHTML = "<b>「"+esc(p.name)+"」さんの回答を修正中です。</b>表を塗り直して「修正を送信する」を押してください。";
   $("editBanner").hidden=false;
-  $("submit").textContent="修正を送信する";
+  $("submit").disabled=false; $("submit").textContent="修正を送信する";
   $("msg").className="status"; $("msg").textContent="回答を読み込みました。";
   window.scrollTo({top:0, behavior:"smooth"});
 }
 function exitEdit(){
-  EDIT=null; $("name").readOnly=false; $("editBanner").hidden=true;
-  $("pwLab").textContent="修正・削除用パスワード（任意）"; $("pw").placeholder="4文字以上"; $("pw").value="";
+  EDIT=null; DONE=false; $("name").readOnly=false; $("editBanner").hidden=true;
+  $("pwLab").textContent="修正・削除用パスワード（必須）"; $("pw").placeholder="4文字以上"; $("pw").value="";
   renderHeader();
 }
 async function deleteMine(){
@@ -491,13 +493,10 @@ function prefillFromExisting(){
   const nm=$("name").value.trim(); if(!nm) return;
   const p = DATA.respondents.find(r=>r.name===nm); if(!p) return;
   if(EDIT) return;
-  if(p.hasPassword){ $("msg").className="status err"; $("msg").textContent="「"+nm+"」さんの回答はパスワードで保護されています。修正するときは、下の回答状況でお名前をクリックしてください。"; return; }
-  if(Object.keys(S.vals).length && !confirm("「"+nm+"」さんの前回の回答を読み込みますか？（今の塗りは置き換わります）")) return;
-  snapshot(); S.vals={};
-  for(const k in S.cell){ const a=p.answers[S.cell[k].slot_id]; if(a && MARKV[a]) S.vals[k]=MARKV[a]; }
-  if(p.comment && !$("comment").value) $("comment").value=p.comment;
-  renderGrid(); persist();
-  $("msg").className="status"; $("msg").textContent="前回の回答を読み込みました。修正して送信すると上書きされます。";
+  $("msg").className="status err";
+  $("msg").textContent = p.hasPassword
+    ? "「"+nm+"」さんの回答はすでにあります。修正するときは、下の回答状況でお名前をクリックしてパスワードを入れてください。別の方の場合は、お名前を区別できるように変えてください。"
+    : "「"+nm+"」さんの回答はすでにあります（パスワードなし）。修正・削除は作成者にご連絡ください。別の方の場合は、お名前を区別できるように変えてください。";
 }
 
 /* ---------- submit ---------- */
@@ -505,9 +504,10 @@ function submit(){
   const msg=$("msg"), name=$("name").value.trim();
   if(!name){ msg.className="status err"; msg.textContent="お名前を入力してください。"; $("name").focus(); return; }
   const answers={}; for(const k in S.cell){ answers[S.cell[k].slot_id] = MARK[S.vals[k]||0]; }
-  const btn=$("submit"); btn.disabled=true; msg.className="status"; msg.textContent="送信中…";
   const newPw = $("pw").value;
+  if(!EDIT && !newPw){ msg.className="status err"; msg.textContent="修正・削除用のパスワードを入力してください（4文字以上）。"; $("pw").focus(); return; }
   if(newPw && newPw.length<4){ msg.className="status err"; msg.textContent="パスワードは4文字以上にしてください。"; $("pw").focus(); return; }
+  const btn=$("submit"); btn.disabled=true; msg.className="status"; msg.textContent="送信中…";
   const payload = { action:"submit", eventId:EVENT_ID, name, answers, comment:$("comment").value };
   if(newPw) payload.newPassword = newPw;
   if(EDIT && EDIT.name===name) payload.password = EDIT.pw;
@@ -518,7 +518,8 @@ function submit(){
     if(EDIT && newPw) EDIT.pw = newPw;
     $("pw").value="";
     msg.className="status ok";
-    msg.textContent = (wasEdit ? "修正を送信しました。" : "送信しました。ありがとうございます。") + (newPw ? "パスワードを設定しました。修正・削除のときに使うので控えておいてください。" : "");
+    msg.textContent = wasEdit ? ("修正を送信しました。" + (newPw ? "パスワードを変更しました。" : "")) : "送信しました。ありがとうございます。修正・削除のときは、回答状況のお名前をクリックしてパスワードを入れてください。";
+    if(!wasEdit){ DONE=true; $("name").readOnly=true; renderHeader(); }
     try{ const d=await apiGet(EVENT_ID); if(!d.error){ DATA=d; renderHeader(); renderResults(); } }catch(e){}
   }).catch(e=>{ btn.disabled=false; msg.className="status err"; msg.textContent="送信に失敗しました: "+e.message; });
 }
